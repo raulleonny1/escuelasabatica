@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Viewer, Worker, SpecialZoomLevel, ScrollMode } from "@react-pdf-viewer/core"
 import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout"
 import { scrollModePlugin } from "@react-pdf-viewer/scroll-mode"
@@ -11,51 +11,58 @@ interface PdfViewerProps {
   url: string
 }
 
-export default function PdfViewer({ url }: PdfViewerProps) {
-  const [error, setError] = useState<string | null>(null)
-
-  const plugins = useMemo(() => {
-    const scrollModePluginInstance = scrollModePlugin()
-    const defaultLayoutPluginInstance = defaultLayoutPlugin()
-    return {
-      scrollModePluginInstance,
-      defaultLayoutPluginInstance,
-      all: [defaultLayoutPluginInstance, scrollModePluginInstance],
-    }
-  }, [url])
-
-  const handleDocumentLoad = () => {
-    setError(null)
-    plugins.scrollModePluginInstance.switchScrollMode(ScrollMode.Page)
-  }
+function PdfDocument({ url, touchMode }: { url: string; touchMode: boolean }) {
+  const scrollModePluginInstance = scrollModePlugin()
+  const defaultLayoutPluginInstance = defaultLayoutPlugin({
+    sidebarTabs: () => [],
+  })
 
   return (
-    <div className="pdf-viewer-wrap relative h-full min-h-[320px] w-full">
-      {error && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-slate-100 p-6">
-          <div className="max-w-md rounded-xl border border-red-200 bg-white p-5 text-center shadow-lg">
-            <p className="font-semibold text-red-700">No se pudo abrir el PDF</p>
-            <p className="mt-2 text-sm text-slate-600">{error}</p>
-            <p className="mt-2 text-xs text-slate-500 break-all">{url}</p>
-          </div>
+    <Viewer
+      fileUrl={url}
+      plugins={[defaultLayoutPluginInstance, scrollModePluginInstance]}
+      defaultScale={touchMode ? SpecialZoomLevel.PageWidth : SpecialZoomLevel.PageFit}
+      onDocumentLoad={() => {
+        scrollModePluginInstance.switchScrollMode(
+          touchMode ? ScrollMode.Vertical : ScrollMode.Page
+        )
+      }}
+      renderLoader={(percent) => (
+        <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-slate-500">
+          Cargando PDF… {Math.round(percent)}%
         </div>
       )}
+      renderError={(loadError) => (
+        <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-4 text-center">
+          <p className="font-semibold text-red-700">No se pudo abrir el PDF</p>
+          <p className="text-sm text-slate-600">
+            {loadError.message || "Archivo no encontrado"}
+          </p>
+          <p className="text-xs text-slate-400 break-all">{url}</p>
+        </div>
+      )}
+    />
+  )
+}
+
+export default function PdfViewer({ url }: PdfViewerProps) {
+  const [touchMode, setTouchMode] = useState(false)
+
+  useEffect(() => {
+    const check = () => {
+      const coarse = window.matchMedia("(pointer: coarse)").matches
+      const narrow = window.matchMedia("(max-width: 1023px)").matches
+      setTouchMode(coarse || narrow)
+    }
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
+
+  return (
+    <div className="pdf-viewer-shell h-full w-full min-h-[200px] lg:min-h-[480px]">
       <Worker workerUrl="/pdf.worker.min.js">
-        <Viewer
-          fileUrl={url}
-          plugins={plugins.all}
-          defaultScale={SpecialZoomLevel.PageFit}
-          onDocumentLoad={handleDocumentLoad}
-          renderError={(loadError) => {
-            const msg = loadError.message || "Archivo no encontrado o dañado"
-            setError(msg)
-            return (
-              <div className="flex h-full min-h-[280px] items-center justify-center p-6 text-center text-sm text-slate-600">
-                {msg}
-              </div>
-            )
-          }}
-        />
+        <PdfDocument key={url} url={url} touchMode={touchMode} />
       </Worker>
     </div>
   )

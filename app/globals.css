@@ -1,31 +1,104 @@
 @import "tailwindcss";
 
-html, body, #__next {
-  height: 100%;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-}
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+
+  --color-primary: #1e3a5f;
+  --color-primary-dark: #152a45;
+  --color-primary-light: #2d5a87;
+  --color-accent: #c9a227;
+  --color-accent-soft: #f5ecd4;
+  --color-surface: #f4f1eb;
+  --color-card: #ffffff;
+  --color-muted: #64748b;
+  --color-border: #e2ddd4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  height: 100%;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: manipulation;
+}
+
+body {
+  background: var(--color-surface);
+  color: #1e293b;
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Visor PDF: altura completa del panel */
+.pdf-viewer-shell {
+  height: 100%;
+  min-height: 480px;
+}
+
+.pdf-viewer-shell .rpv-default-layout__container {
+  height: 100%;
+  min-height: 480px;
+}
+
+.pdf-viewer-shell .rpv-default-layout__main {
+  flex: 1;
+  min-height: 0;
+}
+
+.pdf-viewer-shell .rpv-core__viewer {
+  height: 100%;
+  min-height: 400px;
+  background: #f1f5f9;
+}
+
+.pdf-viewer-shell .rpv-core__inner-pages {
+  min-height: 100%;
+}
+
+.pdf-viewer-shell .rpv-core__page-layer {
+  box-shadow: 0 4px 24px rgba(30, 58, 95, 0.12);
+}
+
+/* Botones y controles táctiles en móvil */
+@media (max-width: 1023px) {
+  .pdf-viewer-shell .rpv-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .pdf-viewer-shell .rpv-core__inner-pages {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+button,
+select,
+textarea,
+input[type="date"] {
+  touch-action: manipulation;
 }

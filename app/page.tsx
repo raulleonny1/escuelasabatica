@@ -12,17 +12,14 @@ import {
   guardarComentariosLocal,
 } from "@/lib/comentarios"
 
+import LeccionControls from "@/components/LeccionControls"
+
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
 
-const TIPOS = [
-  { id: "visual", label: "Visual" },
-  { id: "resumen", label: "Resumen" },
-  { id: "preguntas", label: "Preguntas" },
-  { id: "leccion", label: "Lección" },
-] as const
-
 const inputClass =
-  "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 transition"
+  "w-full rounded-lg border border-border bg-white px-3 py-3 text-base text-slate-700 shadow-sm focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 transition md:py-2 md:text-sm"
+
+type MobileTab = "pdf" | "estudio"
 
 export default function Home() {
   const [showModal, setShowModal] = useState(false)
@@ -38,6 +35,7 @@ export default function Home() {
   const [cargandoComentarios, setCargandoComentarios] = useState(true)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
+  const [mobileTab, setMobileTab] = useState<MobileTab>("pdf")
 
   function formatDateDMY(dateStr: string) {
     if (!dateStr) return ""
@@ -48,6 +46,7 @@ export default function Home() {
   function agregarVersiculo(v: string) {
     setComentario((prev) => (prev ? prev + "\n" + v : v))
     setBibliaPasaje(v)
+    setMobileTab("estudio")
   }
 
   useEffect(() => {
@@ -130,10 +129,18 @@ export default function Home() {
     }
   }
 
+  const pdfUrl = `/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`
+
   return (
-    <div className="flex h-full min-h-0 w-full flex-row">
-      {/* Panel PDF */}
-      <div className="flex min-w-0 flex-7 flex-col border-r border-border bg-slate-50">
+    <div className="flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
+      <div
+        className={`flex min-h-0 min-w-0 flex-col bg-slate-50 lg:flex-7 lg:border-r lg:border-border ${
+          mobileTab === "pdf" ? "flex flex-1" : "hidden lg:flex"
+        }`}
+      >
+        <div className="shrink-0 border-b border-border bg-card p-2 lg:hidden">
+          <LeccionControls semana={semana} setSemana={setSemana} tipo={tipo} setTipo={setTipo} />
+        </div>
         {BibliaPasaje && (
           <div className="border-b border-accent/30 bg-accent-soft px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-primary/70 mb-1">
@@ -149,50 +156,19 @@ export default function Home() {
             </button>
           </div>
         )}
-        <div className="flex-1 min-h-0 overflow-hidden pdf-viewer-wrap">
-          <PdfViewer
-            key={`${semana}-${tipo}`}
-            url={`/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`}
-          />
+        <div className="relative min-h-0 flex-1 w-full">
+          <PdfViewer key={`${semana}-${tipo}`} url={pdfUrl} />
         </div>
       </div>
 
-      {/* Panel lateral */}
-      <aside className="flex min-w-0 flex-2 flex-col gap-3 overflow-y-auto custom-scroll bg-surface p-3 md:p-4">
-        {/* Lección */}
-        <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Lección</p>
-          <label className="mb-1 block text-xs text-slate-500">Semana</label>
-          <select
-            value={semana}
-            onChange={(e) => setSemana(Number(e.target.value))}
-            className={inputClass}
-          >
-            {Array.from({ length: 13 }, (_, i) => (
-              <option key={i} value={i + 1}>
-                Semana {i + 1}
-              </option>
-            ))}
-          </select>
-
-          <p className="mb-2 mt-3 text-xs text-slate-500">Tipo de material</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {TIPOS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTipo(t.id)}
-                className={`rounded-lg px-2 py-2 text-xs font-medium transition-all ${
-                  tipo === t.id
-                    ? "bg-primary text-white shadow-md shadow-primary/25"
-                    : "border border-border bg-white text-slate-600 hover:border-primary/30 hover:bg-white"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </section>
+      <aside
+        className={`flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto custom-scroll bg-surface p-3 md:p-4 lg:flex-2 ${
+          mobileTab === "estudio" ? "flex flex-1" : "hidden lg:flex"
+        }`}
+      >
+        <div className="hidden lg:block">
+          <LeccionControls semana={semana} setSemana={setSemana} tipo={tipo} setTipo={setTipo} />
+        </div>
 
         {/* Comentarios */}
         <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
@@ -201,7 +177,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setShowModal(true)}
-              className="rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-primary-light transition"
+              className="min-h-10 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm active:opacity-90"
             >
               Ver todos
             </button>
@@ -213,7 +189,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className="h-75 custom-scroll overflow-y-auto">
+          <div className="max-h-48 custom-scroll overflow-y-auto lg:max-h-none lg:h-75">
             {cargandoComentarios && (
               <div className="flex items-center gap-2 py-4 text-sm text-muted">
                 <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -292,7 +268,7 @@ export default function Home() {
         </section>
 
         {/* Biblia */}
-        <section className="h-50 custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm">
+        <section className="min-h-40 max-h-56 custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm lg:max-h-none lg:h-50">
           <Biblia agregarVersiculo={agregarVersiculo} />
         </section>
 
@@ -320,7 +296,7 @@ export default function Home() {
               />
               <button
                 type="button"
-                className="w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-white shadow-md shadow-primary/20 hover:bg-primary-light transition disabled:opacity-50"
+                className="min-h-12 w-full rounded-lg bg-primary py-3 text-base font-medium text-white shadow-md shadow-primary/20 active:opacity-90 disabled:opacity-50"
                 disabled={guardando || !comentario.trim()}
                 onClick={async () => {
                   await handleGuardar(selectedDate, comentario)
@@ -333,6 +309,33 @@ export default function Home() {
           )}
         </section>
       </aside>
+
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-border bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.08)] lg:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        aria-label="Navegación principal"
+      >
+        <button
+          type="button"
+          onClick={() => setMobileTab("pdf")}
+          className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition active:bg-slate-100 ${
+            mobileTab === "pdf" ? "text-primary bg-primary/5" : "text-slate-600"
+          }`}
+        >
+          <span className="text-lg" aria-hidden>📄</span>
+          Lección PDF
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("estudio")}
+          className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition active:bg-slate-100 ${
+            mobileTab === "estudio" ? "text-primary bg-primary/5" : "text-slate-600"
+          }`}
+        >
+          <span className="text-lg" aria-hidden>📖</span>
+          Biblia y notas
+        </button>
+      </nav>
 
       {/* Modal */}
       {showModal && (
