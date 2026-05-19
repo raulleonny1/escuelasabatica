@@ -1,6 +1,7 @@
 import type { Viewport } from "next"
 import { Lora, Source_Sans_3 } from "next/font/google"
 import AppHeader from "@/components/AppHeader"
+import PwaInstallPrompt from "@/components/PwaInstallPrompt"
 import "./globals.css"
 
 const lora = Lora({
@@ -18,6 +19,14 @@ const sourceSans = Source_Sans_3({
 export const metadata = {
   title: "Escuela Sabática",
   description: "Lección del trimestre | Estudio Bíblico Diario",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -50,6 +59,7 @@ export default function RootLayout({
             </div>
           </main>
         </div>
+        <PwaInstallPrompt />
       </body>
     </html>
   )

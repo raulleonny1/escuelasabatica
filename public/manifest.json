@@ -1,24 +1,35 @@
 {
+  "id": "/",
   "name": "Escuela Sabática",
   "short_name": "Sabática",
+  "description": "Lección del trimestre | Estudio Bíblico Diario",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f4f1eb",
   "theme_color": "#1e3a5f",
-  "description": "Lección del trimestre | Estudio Bíblico Diario",
+  "lang": "es",
+  "dir": "ltr",
+  "categories": ["education", "books"],
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
