@@ -1,4 +1,4 @@
-import type { PdfJs } from "@react-pdf-viewer/core"
+import type { PDFDocumentProxy } from "pdfjs-dist"
 import { getFechaDestacadaEnSemana } from "@/lib/semana"
 
 const NOMBRES_DIA = [
@@ -47,7 +47,7 @@ export function getTerminosBusquedaDia(fecha: string): string[] {
 }
 
 export async function findPageIndexForDay(
-  doc: PdfJs.PdfDocument,
+  doc: PDFDocumentProxy,
   fecha: string
 ): Promise<number> {
   const terminos = getTerminosBusquedaDia(fecha).map(normalizarTexto)
@@ -56,7 +56,9 @@ export async function findPageIndexForDay(
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i)
       const content = await page.getTextContent()
-      const text = normalizarTexto(content.items.map((it) => it.str).join(""))
+      const text = normalizarTexto(
+        content.items.map((it) => ("str" in it ? String(it.str) : "")).join("")
+      )
       if (text.includes(termino)) return i - 1
     }
   }

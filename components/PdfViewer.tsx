@@ -1,19 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import {
-  Viewer,
-  Worker,
-  SpecialZoomLevel,
-  ScrollMode,
-  type DocumentLoadEvent,
-} from "@react-pdf-viewer/core"
-import { defaultLayoutPlugin } from "@react-pdf-viewer/default-layout"
-import { pageNavigationPlugin } from "@react-pdf-viewer/page-navigation"
-import { scrollModePlugin } from "@react-pdf-viewer/scroll-mode"
+import { useEffect, useState } from "react"
+import { Viewer, Worker, SpecialZoomLevel } from "@react-pdf-viewer/core"
 import { findPageIndexForDay, getFechaLecturaParaSemana } from "@/lib/leccionPdf"
 import "@react-pdf-viewer/core/lib/styles/index.css"
-import "@react-pdf-viewer/default-layout/lib/styles/index.css"
 
 interface PdfViewerProps {
   url: string
@@ -32,43 +22,46 @@ function detectarModoTactil(): boolean {
 export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProps) {
   const [touchMode] = useState(detectarModoTactil)
   const [montado, setMontado] = useState(false)
-
-  const scrollModePluginInstance = useMemo(() => scrollModePlugin(), [])
-  const pageNavigationPluginInstance = useMemo(() => pageNavigationPlugin(), [])
-  const defaultLayoutPluginInstance = useMemo(
-    () =>
-      defaultLayoutPlugin({
-        sidebarTabs: () => [],
-      }),
-    []
-  )
+  const [paginaInicial, setPaginaInicial] = useState(0)
+  const [paginaLista, setPaginaLista] = useState(false)
 
   useEffect(() => {
     setMontado(true)
   }, [])
 
-  const onDocumentLoad = useCallback(
-    async (e: DocumentLoadEvent) => {
-      scrollModePluginInstance.switchScrollMode(
-        touchMode ? ScrollMode.Vertical : ScrollMode.Page
-      )
+  useEffect(() => {
+    let cancelado = false
+    setPaginaLista(false)
+    setPaginaInicial(0)
 
-      if (irAlDiaLectura && semana) {
-        try {
-          const fecha = getFechaLecturaParaSemana(semana)
-          const pageIndex = await findPageIndexForDay(e.doc, fecha)
-          requestAnimationFrame(() => {
-            pageNavigationPluginInstance.jumpToPage(pageIndex)
-          })
-        } catch {
-          // Si falla la búsqueda, queda en la página 1
-        }
+    if (!irAlDiaLectura || !semana) {
+      setPaginaLista(true)
+      return
+    }
+
+    async function resolverPagina() {
+      try {
+        const pdfjs = await import("pdfjs-dist")
+        pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js"
+        const doc = await pdfjs.getDocument(url).promise
+        const fecha = getFechaLecturaParaSemana(semana!)
+        const index = await findPageIndexForDay(doc, fecha)
+        if (!cancelado) setPaginaInicial(index)
+        await doc.destroy()
+      } catch {
+        if (!cancelado) setPaginaInicial(0)
+      } finally {
+        if (!cancelado) setPaginaLista(true)
       }
-    },
-    [touchMode, irAlDiaLectura, semana, scrollModePluginInstance, pageNavigationPluginInstance]
-  )
+    }
 
-  if (!montado) {
+    resolverPagina()
+    return () => {
+      cancelado = true
+    }
+  }, [url, irAlDiaLectura, semana])
+
+  if (!montado || !paginaLista) {
     return (
       <div className="pdf-viewer-shell flex h-full min-h-[200px] items-center justify-center lg:min-h-[480px]">
         <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -80,15 +73,10 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
     <div className="pdf-viewer-shell h-full w-full min-h-[200px] lg:min-h-[480px]">
       <Worker workerUrl="/pdf.worker.min.js">
         <Viewer
-          key={url}
+          key={`${url}-${paginaInicial}`}
           fileUrl={url}
-          plugins={[
-            defaultLayoutPluginInstance,
-            scrollModePluginInstance,
-            pageNavigationPluginInstance,
-          ]}
+          initialPage={paginaInicial}
           defaultScale={touchMode ? SpecialZoomLevel.PageWidth : SpecialZoomLevel.PageFit}
-          onDocumentLoad={onDocumentLoad}
           renderLoader={(percent) => (
             <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-slate-500">
               Cargando PDF… {Math.round(percent)}%

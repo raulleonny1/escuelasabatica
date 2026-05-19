@@ -16,6 +16,7 @@ import LeccionControls from "@/components/LeccionControls"
 import NotasPanel from "@/components/NotasPanel"
 import ChatNombreModal from "@/components/ChatNombreModal"
 import ChatPanel from "@/components/ChatPanel"
+import PdfErrorBoundary from "@/components/PdfErrorBoundary"
 import {
   getFechaDestacadaEnSemana,
   getFechasSemana,
@@ -217,12 +218,14 @@ export default function Home() {
           </div>
         )}
         <div className="relative min-h-0 flex-1 w-full">
-          <PdfViewer
-            key={pdfViewerKey}
-            url={pdfUrl}
-            irAlDiaLectura={tipo === "leccion"}
-            semana={semana}
-          />
+          <PdfErrorBoundary url={pdfUrl}>
+            <PdfViewer
+              key={pdfViewerKey}
+              url={pdfUrl}
+              irAlDiaLectura={tipo === "leccion"}
+              semana={semana}
+            />
+          </PdfErrorBoundary>
         </div>
       </div>
 
