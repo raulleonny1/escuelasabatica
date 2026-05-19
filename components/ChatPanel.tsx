@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { CHAT_EMOJIS } from "@/lib/chatEmojis"
 import {
   enviarMensajeChat,
   formatHoraChat,
@@ -24,8 +25,15 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
   const [enviando, setEnviando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [listo, setListo] = useState(false)
+  const [mostrarEmojis, setMostrarEmojis] = useState(false)
   const listaRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const sessionId = getChatSessionId()
+
+  function insertarEmoji(emoji: string) {
+    setTexto((prev) => prev + emoji)
+    inputRef.current?.focus()
+  }
 
   useEffect(() => {
     setListo(true)
@@ -155,24 +163,56 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
         </p>
       )}
 
-      <form onSubmit={handleEnviar} className="shrink-0 border-t border-border p-2 flex gap-1.5">
-        <input
-          type="text"
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Escribe un mensaje…"
-          maxLength={2000}
-          disabled={!listo}
-          className="min-h-11 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-base text-slate-800 focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 md:text-sm"
-        />
-        <button
-          type="submit"
-          disabled={!listo || enviando || !texto.trim()}
-          className="min-h-11 shrink-0 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 active:opacity-90"
-        >
-          Enviar
-        </button>
-      </form>
+      <div className="shrink-0 border-t border-border p-2">
+        {mostrarEmojis && (
+          <div className="mb-2 grid grid-cols-8 gap-1 rounded-lg border border-border bg-surface p-2 sm:grid-cols-12">
+            {CHAT_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => insertarEmoji(emoji)}
+                className="flex min-h-9 min-w-9 items-center justify-center rounded-md text-xl active:bg-white"
+                aria-label={`Emoji ${emoji}`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+        <form onSubmit={handleEnviar} className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => setMostrarEmojis((v) => !v)}
+            disabled={!listo}
+            className={`min-h-11 min-w-11 shrink-0 rounded-lg border text-xl active:opacity-90 disabled:opacity-50 ${
+              mostrarEmojis
+                ? "border-primary bg-primary/10"
+                : "border-border bg-white"
+            }`}
+            aria-label={mostrarEmojis ? "Ocultar emojis" : "Mostrar emojis"}
+            aria-expanded={mostrarEmojis}
+          >
+            😀
+          </button>
+          <input
+            ref={inputRef}
+            type="text"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="Escribe un mensaje…"
+            maxLength={2000}
+            disabled={!listo}
+            className="min-h-11 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-base text-slate-800 focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 md:text-sm"
+          />
+          <button
+            type="submit"
+            disabled={!listo || enviando || !texto.trim()}
+            className="min-h-11 shrink-0 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 active:opacity-90"
+          >
+            Enviar
+          </button>
+        </form>
+      </div>
     </section>
   )
 }

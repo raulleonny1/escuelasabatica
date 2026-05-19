@@ -38,6 +38,9 @@ export function leerNombreChat(): string {
 
 export function guardarNombreChat(nombre: string) {
   localStorage.setItem(NOMBRE_KEY, nombre.trim())
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("chat-nombre-guardado"))
+  }
 }
 
 export function getChatSessionId(): string {
