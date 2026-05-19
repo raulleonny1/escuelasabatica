@@ -267,7 +267,7 @@ export default function Home() {
           />
         )}
 
-        <section className="min-h-40 max-h-56 custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm lg:max-h-none lg:h-50">
+        <section className="flex min-h-[min(50vh,360px)] max-h-[min(55vh,480px)] flex-col custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm lg:min-h-[320px] lg:max-h-[420px]">
           <Biblia agregarVersiculo={agregarVersiculo} />
         </section>
       </aside>
