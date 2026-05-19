@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   limit,
   onSnapshot,
   orderBy,
@@ -18,6 +19,13 @@ const NOMBRE_KEY = "chatNombre"
 const SESSION_KEY = "chatSessionId"
 const JOIN_KEY = "chatJoinAnnounced"
 
+/** Cuánto tiempo sin latido = ya no está en línea */
+const PRESENCIA_MS = 22_000
+/** Cada cuánto renueva la propia presencia */
+const HEARTBEAT_MS = 8_000
+/** Revisa en pantalla si alguien cayó (sin esperar cambio en Firestore) */
+const TICK_UI_MS = 2_000
+
 export type ChatMessage = {
   id: string
   nombre: string
@@ -27,7 +35,7 @@ export type ChatMessage = {
 }
 
 export type ChatUsuarioEnLinea = {
-  sessionId: string
+  presenceId: string
   nombre: string
 }
 
@@ -51,6 +59,52 @@ export function getChatSessionId(): string {
     sessionStorage.setItem(SESSION_KEY, id)
   }
   return id
+}
+
+/** Un documento de presencia por nombre (evita duplicados por pestañas/recargas) */
+export function getPresenceDocId(nombre: string): string {
+  const slug = nombre
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 64)
+  return slug || "usuario"
+}
+
+function filtrarUsuariosActivos(
+  docs: { id: string; nombre: string; lastSeenMs: number }[]
+): ChatUsuarioEnLinea[] {
+  const ahora = Date.now()
+  const vistos = new Set<string>()
+  const activos: ChatUsuarioEnLinea[] = []
+
+  for (const item of docs) {
+    if (!item.lastSeenMs || ahora - item.lastSeenMs >= PRESENCIA_MS) continue
+    const clave = item.nombre.trim().toLowerCase()
+    if (vistos.has(clave)) continue
+    vistos.add(clave)
+    activos.push({ presenceId: item.id, nombre: item.nombre })
+  }
+
+  activos.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+  return activos
+}
+
+async function limpiarPresenciaObsoleta() {
+  const ahora = Date.now()
+  const snap = await getDocs(collection(db, "chatPresence"))
+  await Promise.all(
+    snap.docs.map(async (item) => {
+      const ts = item.data().lastSeen as Timestamp | undefined
+      const ms = ts?.toMillis?.() ?? 0
+      if (!ms || ahora - ms >= PRESENCIA_MS) {
+        await deleteDoc(item.ref).catch(() => {})
+      }
+    })
+  )
 }
 
 export async function enviarMensajeChat(nombre: string, texto: string, sessionId: string) {
@@ -102,61 +156,86 @@ export function subscribeChatMessages(
   )
 }
 
-const PRESENCIA_MS = 90_000
-
 export function subscribePresenciaChat(
   onData: (usuarios: ChatUsuarioEnLinea[]) => void,
   onError: (error: Error) => void
 ): Unsubscribe {
-  return onSnapshot(
+  let cache: { id: string; nombre: string; lastSeenMs: number }[] = []
+
+  const emitir = () => onData(filtrarUsuariosActivos(cache))
+
+  const unsub = onSnapshot(
     collection(db, "chatPresence"),
     (snapshot) => {
-      const ahora = Date.now()
-      const usuarios: ChatUsuarioEnLinea[] = []
-      snapshot.forEach((item) => {
+      cache = snapshot.docs.map((item) => {
         const data = item.data()
         const ts = data.lastSeen as Timestamp | undefined
-        const ms = ts?.toMillis?.() ?? 0
-        if (ms && ahora - ms < PRESENCIA_MS) {
-          usuarios.push({
-            sessionId: item.id,
-            nombre: (data.nombre as string) ?? "Anónimo",
-          })
+        return {
+          id: item.id,
+          nombre: (data.nombre as string) ?? "Anónimo",
+          lastSeenMs: ts?.toMillis?.() ?? 0,
         }
       })
-      usuarios.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
-      onData(usuarios)
+      emitir()
     },
     (error) => onError(error as Error)
   )
+
+  const tick = setInterval(emitir, TICK_UI_MS)
+
+  return () => {
+    clearInterval(tick)
+    unsub()
+  }
 }
 
-export function iniciarPresenciaChat(nombre: string, sessionId: string): () => void {
-  const ref = doc(db, "chatPresence", sessionId)
+export function iniciarPresenciaChat(nombre: string): () => void {
+  const nombreLimpio = nombre.trim().slice(0, 32)
+  const presenceId = getPresenceDocId(nombreLimpio)
+  const ref = doc(db, "chatPresence", presenceId)
 
   const actualizar = () => {
     setDoc(
       ref,
       {
-        nombre: nombre.trim().slice(0, 32),
+        nombre: nombreLimpio,
         lastSeen: serverTimestamp(),
       },
       { merge: true }
     ).catch(() => {})
   }
 
-  actualizar()
-  const interval = setInterval(actualizar, 30_000)
-
-  const onHide = () => {
-    if (document.visibilityState === "hidden") actualizar()
+  const salir = () => {
+    deleteDoc(ref).catch(() => {})
   }
-  document.addEventListener("visibilitychange", onHide)
+
+  actualizar()
+  limpiarPresenciaObsoleta().catch(() => {})
+
+  const heartbeat = setInterval(actualizar, HEARTBEAT_MS)
+  const limpieza = setInterval(() => {
+    limpiarPresenciaObsoleta().catch(() => {})
+  }, 20_000)
+
+  const onVisible = () => {
+    if (document.visibilityState === "hidden") {
+      salir()
+    } else {
+      actualizar()
+    }
+  }
+
+  const onPageHide = () => salir()
+
+  document.addEventListener("visibilitychange", onVisible)
+  window.addEventListener("pagehide", onPageHide)
 
   return () => {
-    clearInterval(interval)
-    document.removeEventListener("visibilitychange", onHide)
-    deleteDoc(ref).catch(() => {})
+    clearInterval(heartbeat)
+    clearInterval(limpieza)
+    document.removeEventListener("visibilitychange", onVisible)
+    window.removeEventListener("pagehide", onPageHide)
+    salir()
   }
 }
 

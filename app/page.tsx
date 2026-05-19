@@ -75,7 +75,7 @@ export default function Home() {
     if (!chatNombre) return
     const sessionId = getChatSessionId()
     anunciarEntradaChat(chatNombre, sessionId).catch(() => {})
-    return iniciarPresenciaChat(chatNombre, sessionId)
+    return iniciarPresenciaChat(chatNombre)
   }, [chatNombre])
 
   function handleConfirmarNombreChat(nombre: string) {

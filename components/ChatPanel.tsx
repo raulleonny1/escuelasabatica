@@ -6,6 +6,7 @@ import {
   enviarMensajeChat,
   formatHoraChat,
   getChatSessionId,
+  getPresenceDocId,
   subscribeChatMessages,
   subscribePresenciaChat,
   type ChatMessage,
@@ -76,7 +77,8 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
     }
   }
 
-  const otrosEnLinea = enLinea.filter((u) => u.sessionId !== sessionId)
+  const miPresenceId = getPresenceDocId(nombre)
+  const otrosEnLinea = enLinea.filter((u) => u.presenceId !== miPresenceId)
 
   return (
     <section
