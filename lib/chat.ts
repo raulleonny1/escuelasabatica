@@ -26,8 +26,11 @@ const NOMBRE_KEY = "chatNombre"
 const SESSION_KEY = "chatSessionId"
 const JOIN_KEY = "chatJoinAnnounced"
 
-/** Sin actividad en el chat = ya no aparece como “en el chat” */
+/** Ventana para “conectado” (app abierta con nombre de chat) */
+const PRESENCIA_APP_MS = 90_000
+/** Ventana para “activo en el panel del chat” */
 const PRESENCIA_CHAT_MS = 45_000
+const HEARTBEAT_APP_MS = 15_000
 const HEARTBEAT_CHAT_MS = 10_000
 const TICK_UI_MS = 2_000
 
@@ -82,16 +85,16 @@ type PresenciaDoc = {
   nombre: string
   lastSeenMs: number
   enChat: boolean
+  enApp: boolean
 }
 
-function filtrarUsuariosEnChat(docs: PresenciaDoc[]): ChatUsuarioEnLinea[] {
+function dedupePorNombre(docs: PresenciaDoc[], maxEdadMs: number): ChatUsuarioEnLinea[] {
   const ahora = Date.now()
   const vistos = new Set<string>()
   const activos: ChatUsuarioEnLinea[] = []
 
   for (const item of docs) {
-    if (!item.enChat) continue
-    if (!item.lastSeenMs || ahora - item.lastSeenMs >= PRESENCIA_CHAT_MS) continue
+    if (!item.lastSeenMs || ahora - item.lastSeenMs >= maxEdadMs) continue
     const clave = item.nombre.trim().toLowerCase()
     if (vistos.has(clave)) continue
     vistos.add(clave)
@@ -100,6 +103,24 @@ function filtrarUsuariosEnChat(docs: PresenciaDoc[]): ChatUsuarioEnLinea[] {
 
   activos.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
   return activos
+}
+
+/** Conectados: tienen la app abierta (pestaña lección, PDF, etc.) */
+function filtrarUsuariosConectados(docs: PresenciaDoc[]): ChatUsuarioEnLinea[] {
+  const recientes = docs.filter((item) => {
+    if (!item.lastSeenMs) return false
+    if (Date.now() - item.lastSeenMs >= PRESENCIA_APP_MS) return false
+    return item.enApp || item.enChat
+  })
+  return dedupePorNombre(recientes, PRESENCIA_APP_MS)
+}
+
+/** Escribiendo o viendo el panel del chat ahora */
+function filtrarUsuariosEnChat(docs: PresenciaDoc[]): ChatUsuarioEnLinea[] {
+  const recientes = docs.filter(
+    (item) => item.enChat && item.lastSeenMs && Date.now() - item.lastSeenMs < PRESENCIA_CHAT_MS
+  )
+  return dedupePorNombre(recientes, PRESENCIA_CHAT_MS)
 }
 
 async function limpiarPresenciaObsoleta() {
@@ -111,9 +132,10 @@ async function limpiarPresenciaObsoleta() {
       const ts = data.lastSeen as Timestamp | undefined
       const ms = ts?.toMillis?.() ?? 0
       const enChat = data.enChat === true
-      if (!ms || ahora - ms >= PRESENCIA_CHAT_MS * 2) {
+      const enApp = data.enApp === true
+      if (!ms || ahora - ms >= PRESENCIA_APP_MS * 2) {
         await deleteDoc(item.ref).catch(() => {})
-      } else if (!enChat && ahora - ms >= PRESENCIA_CHAT_MS) {
+      } else if (!enChat && !enApp && ahora - ms >= PRESENCIA_APP_MS) {
         await deleteDoc(item.ref).catch(() => {})
       }
     })
@@ -175,7 +197,7 @@ export function subscribePresenciaChat(
 ): Unsubscribe {
   let cache: PresenciaDoc[] = []
 
-  const emitir = () => onData(filtrarUsuariosEnChat(cache))
+  const emitir = () => onData(filtrarUsuariosConectados(cache))
 
   const unsub = onSnapshot(
     collection(db, "chatPresence"),
@@ -188,6 +210,7 @@ export function subscribePresenciaChat(
           nombre: (data.nombre as string) ?? "Anónimo",
           lastSeenMs: ts?.toMillis?.() ?? 0,
           enChat: data.enChat === true,
+          enApp: data.enApp === true || data.enChat === true,
         }
       })
       emitir()
@@ -203,7 +226,74 @@ export function subscribePresenciaChat(
   }
 }
 
-/** Presencia solo mientras el usuario está en la pestaña/panel del chat */
+export function subscribePresenciaCompleta(
+  onData: (conectados: ChatUsuarioEnLinea[], enChat: ChatUsuarioEnLinea[]) => void,
+  onError: (error: Error) => void
+): Unsubscribe {
+  let cache: PresenciaDoc[] = []
+
+  const emitir = () =>
+    onData(filtrarUsuariosConectados(cache), filtrarUsuariosEnChat(cache))
+
+  const unsub = onSnapshot(
+    collection(db, "chatPresence"),
+    (snapshot) => {
+      cache = snapshot.docs.map((item) => {
+        const data = item.data()
+        const ts = data.lastSeen as Timestamp | undefined
+        return {
+          id: item.id,
+          nombre: (data.nombre as string) ?? "Anónimo",
+          lastSeenMs: ts?.toMillis?.() ?? 0,
+          enChat: data.enChat === true,
+          enApp: data.enApp === true || data.enChat === true,
+        }
+      })
+      emitir()
+    },
+    (error) => onError(error as Error)
+  )
+
+  const tick = setInterval(emitir, TICK_UI_MS)
+  return () => {
+    clearInterval(tick)
+    unsub()
+  }
+}
+
+/** Presencia en la app (cualquier pestaña) mientras tenga nombre de chat */
+export function iniciarPresenciaEnApp(nombre: string, sessionId: string): () => void {
+  const nombreLimpio = nombre.trim().slice(0, 32)
+  const presenceId = getPresenceDocId(nombreLimpio)
+  const ref = doc(db, "chatPresence", presenceId)
+
+  const actualizar = () => {
+    setDoc(
+      ref,
+      {
+        nombre: nombreLimpio,
+        sessionId,
+        enApp: true,
+        lastSeen: serverTimestamp(),
+      },
+      { merge: true }
+    ).catch(() => {})
+  }
+
+  actualizar()
+  const heartbeat = setInterval(actualizar, HEARTBEAT_APP_MS)
+
+  return () => {
+    clearInterval(heartbeat)
+    setDoc(
+      ref,
+      { enApp: false, lastSeen: serverTimestamp() },
+      { merge: true }
+    ).catch(() => {})
+  }
+}
+
+/** Marca que el usuario está en el panel/pestaña del chat */
 export function iniciarPresenciaEnChat(nombre: string, sessionId: string): () => void {
   const nombreLimpio = nombre.trim().slice(0, 32)
   const presenceId = getPresenceDocId(nombreLimpio)
@@ -215,6 +305,7 @@ export function iniciarPresenciaEnChat(nombre: string, sessionId: string): () =>
       {
         nombre: nombreLimpio,
         sessionId,
+        enApp: true,
         enChat: true,
         lastSeen: serverTimestamp(),
         lastActiveInChat: serverTimestamp(),
@@ -239,31 +330,8 @@ export function iniciarPresenciaEnChat(nombre: string, sessionId: string): () =>
 
   const heartbeat = setInterval(actualizar, HEARTBEAT_CHAT_MS)
 
-  const onVisible = () => {
-    if (document.visibilityState === "hidden") {
-      salirDelChat()
-    } else {
-      actualizar()
-    }
-  }
-
-  const onPageHide = () => salirDelChat()
-
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", onVisible)
-  }
-  if (typeof window !== "undefined") {
-    window.addEventListener("pagehide", onPageHide)
-  }
-
   return () => {
     clearInterval(heartbeat)
-    if (typeof document !== "undefined") {
-      document.removeEventListener("visibilitychange", onVisible)
-    }
-    if (typeof window !== "undefined") {
-      window.removeEventListener("pagehide", onPageHide)
-    }
     salirDelChat()
   }
 }
@@ -276,6 +344,7 @@ export function pulsoActividadEnChat(nombre: string) {
     ref,
     {
       nombre: nombreLimpio,
+      enApp: true,
       enChat: true,
       lastSeen: serverTimestamp(),
       lastActiveInChat: serverTimestamp(),

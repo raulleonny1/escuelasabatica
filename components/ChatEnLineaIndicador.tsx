@@ -22,8 +22,10 @@ export default function ChatEnLineaIndicador({ placement }: { placement: Placeme
 
   if (!nombre) return null
 
-  const nombres = enLinea.map((u) => u.nombre)
-  const cantidad = nombres.length
+  const miNombre = nombre.trim().toLowerCase()
+  const otros = enLinea.filter((u) => u.nombre.trim().toLowerCase() !== miNombre)
+  const nombres = otros.map((u) => u.nombre)
+  const cantidad = enLinea.length
 
   const contenido = (
     <>
@@ -36,9 +38,9 @@ export default function ChatEnLineaIndicador({ placement }: { placement: Placeme
           className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
           aria-hidden
         />
-        {cantidad === 0 ? "Nadie en el chat" : `${cantidad} en el chat`}
+        {cantidad === 0 ? "Sin conexión" : cantidad === 1 ? "Tú en línea" : `${cantidad} en línea`}
       </p>
-      {cantidad > 0 && (
+      {nombres.length > 0 && (
         <p
           className={`mt-0.5 truncate text-xs text-white/95 ${
             placement === "desktop" ? "text-center" : ""

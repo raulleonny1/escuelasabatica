@@ -25,8 +25,10 @@ import {
 import {
   getChatSessionId,
   guardarNombreChat,
+  iniciarPresenciaEnApp,
   leerNombreChat,
 } from "@/lib/chat"
+import { useMediaLg } from "@/hooks/useMediaLg"
 import { CHAT_ABRIR_EVENT, CHAT_NO_LEIDOS_EVENT } from "@/lib/chatNotificaciones"
 import { safeLocalRemove, safeSessionRemove } from "@/lib/storage"
 
@@ -54,6 +56,7 @@ export default function Home() {
   const [chatNombre, setChatNombre] = useState<string | null>(null)
   const [chatNombreListo, setChatNombreListo] = useState(false)
   const [chatNoLeidos, setChatNoLeidos] = useState(0)
+  const isLg = useMediaLg()
 
   function formatDateDMY(dateStr: string) {
     if (!dateStr) return ""
@@ -72,6 +75,12 @@ export default function Home() {
     setChatNombre(guardado || null)
     setChatNombreListo(true)
   }, [])
+
+  useEffect(() => {
+    if (!chatNombre) return
+    const sessionId = getChatSessionId()
+    return iniciarPresenciaEnApp(chatNombre, sessionId)
+  }, [chatNombre])
 
   useEffect(() => {
     const onNoLeidos = (e: Event) => {
@@ -278,7 +287,7 @@ export default function Home() {
         {chatNombre && (
           <ChatPanel
             nombre={chatNombre}
-            activo
+            activo={isLg}
             onCambiarNombre={handleCambiarNombreChat}
             className="hidden lg:flex lg:min-h-[280px] lg:max-h-[340px]"
           />
@@ -293,7 +302,7 @@ export default function Home() {
         >
           <ChatPanel
             nombre={chatNombre}
-            activo={mobileTab === "chat"}
+            activo={!isLg && mobileTab === "chat"}
             onCambiarNombre={handleCambiarNombreChat}
             className="min-h-0 flex-1"
           />

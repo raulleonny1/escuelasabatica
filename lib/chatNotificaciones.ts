@@ -3,43 +3,42 @@
 export const CHAT_ABRIR_EVENT = "chat-abrir"
 export const CHAT_NO_LEIDOS_EVENT = "chat-no-leidos"
 
-/** Mensaje dirigido a alguien: @nombre (p. ej. @Raul) */
-export function mensajeDirigidoAUsuario(texto: string, nombreUsuario: string): boolean {
+/** Nombres con los que se puede mencionar (@Raul, @Matias, nombre completo…) */
+export function variantesMencion(nombreUsuario: string): string[] {
   const nombre = nombreUsuario.trim()
-  if (!nombre) return false
-
-  const esc = nombre.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-  const sinAcentos = nombre
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-  const escSin = sinAcentos.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-
-  const patrones = [esc, escSin].filter((p, i, a) => a.indexOf(p) === i)
-  return patrones.some((p) => new RegExp(`@${p}(?=\\s|$|[.,!?;:])`, "iu").test(texto))
+  if (!nombre) return []
+  const partes = nombre.split(/\s+/).filter(Boolean)
+  const set = new Set([nombre, ...partes])
+  return [...set]
 }
 
-/**
- * ¿Te escriben a ti? @tuNombre, o chat de dos (solo otra persona en el chat ahora).
- */
-export function mensajeEsParaMi(
-  texto: string,
-  miNombre: string,
-  otrosActivosEnChat: number
-): boolean {
-  if (mensajeDirigidoAUsuario(texto, miNombre)) return true
-  return otrosActivosEnChat === 1
+/** Mensaje dirigido a alguien con @nombre o @primerNombre */
+export function mensajeDirigidoAUsuario(texto: string, nombreUsuario: string): boolean {
+  const variantes = variantesMencion(nombreUsuario)
+  if (variantes.length === 0) return false
+
+  return variantes.some((variante) => {
+    const esc = variante.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const sinAcentos = variante
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+    const escSin = sinAcentos.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const patrones = [esc, escSin].filter((p, i, a) => a.indexOf(p) === i)
+    return patrones.some((p) => new RegExp(`@${p}(?:\\s|$|[.,!?;:])`, "iu").test(texto))
+  })
+}
+
+export function mensajeEsParaMi(texto: string, miNombre: string): boolean {
+  return mensajeDirigidoAUsuario(texto, miNombre)
 }
 
 let audioCtx: AudioContext | null = null
 let ultimoSonidoMs = 0
+let audioListo = false
 
-/** Sonido corto solo para mensajes dirigidos a ti (no en cada mensaje del grupo). */
-export function reproducirSonidoMensajeDirecto() {
-  if (typeof window === "undefined") return
-  const ahora = Date.now()
-  if (ahora - ultimoSonidoMs < 400) return
-  ultimoSonidoMs = ahora
-
+/** El navegador exige un clic antes de reproducir sonido */
+export function prepararSonidoChat() {
+  if (typeof window === "undefined" || audioListo) return
   try {
     const Ctx =
       window.AudioContext ||
@@ -47,20 +46,37 @@ export function reproducirSonidoMensajeDirecto() {
     if (!Ctx) return
     audioCtx = audioCtx ?? new Ctx()
     if (audioCtx.state === "suspended") void audioCtx.resume()
+    audioListo = true
+  } catch {
+    // ignorar
+  }
+}
+
+export function reproducirSonidoMensajeDirecto() {
+  if (typeof window === "undefined") return
+  const ahora = Date.now()
+  if (ahora - ultimoSonidoMs < 400) return
+  ultimoSonidoMs = ahora
+
+  prepararSonidoChat()
+  if (!audioCtx) return
+
+  try {
+    if (audioCtx.state === "suspended") void audioCtx.resume()
 
     const t = audioCtx.currentTime
     const osc = audioCtx.createOscillator()
     const gain = audioCtx.createGain()
     osc.connect(gain)
     gain.connect(audioCtx.destination)
-    osc.frequency.value = 740
+    osc.frequency.value = 880
     osc.type = "sine"
-    gain.gain.setValueAtTime(0.07, t)
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18)
+    gain.gain.setValueAtTime(0.12, t)
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22)
     osc.start(t)
-    osc.stop(t + 0.18)
+    osc.stop(t + 0.22)
   } catch {
-    // navegador sin audio o sin gesto previo
+    // ignorar
   }
 }
 
@@ -84,21 +100,15 @@ export async function solicitarPermisoNotificaciones(): Promise<boolean> {
   return perm === "granted"
 }
 
-/** Notificación del sistema solo si el mensaje es para ti. */
-export function notificarMensajeChat(
-  de: string,
-  texto: string,
-  paraNombre: string,
-  otrosActivosEnChat: number
-) {
+export function notificarMensajeChat(de: string, texto: string, paraNombre: string) {
   if (typeof window === "undefined" || !("Notification" in window)) return
   if (Notification.permission !== "granted") return
-  if (!mensajeEsParaMi(texto, paraNombre, otrosActivosEnChat)) return
+  if (!mensajeEsParaMi(texto, paraNombre)) return
 
   const cuerpo = texto.length > 120 ? `${texto.slice(0, 117)}…` : texto
 
   try {
-    const n = new Notification(`💬 ${de} en Escuela Sabática`, {
+    const n = new Notification(`💬 ${de} te escribió`, {
       body: cuerpo,
       icon: "/logoes.png",
       tag: "chat-escuela-sabatica",
@@ -109,7 +119,7 @@ export function notificarMensajeChat(
       n.close()
     }
   } catch {
-    // ignorar si el navegador bloquea la notificación
+    // ignorar
   }
 }
 
