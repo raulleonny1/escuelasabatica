@@ -122,3 +122,13 @@ textarea,
 input[type="date"] {
   touch-action: manipulation;
 }
+
+/* Chat: barra de envío siempre visible (no quedar detrás de la nav inferior) */
+@media (max-width: 1023px) {
+  .chat-compose {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+  }
+}

@@ -88,7 +88,7 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
 
   return (
     <section
-      className={`flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm ${className}`}
+      className={`flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm ${className}`}
     >
       <div className="shrink-0 border-b border-border bg-primary/5 px-3 py-2.5">
         <div className="flex items-start justify-between gap-2">
@@ -171,7 +171,7 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
         </p>
       )}
 
-      <div className="shrink-0 border-t border-border p-2">
+      <div className="chat-compose shrink-0 border-t border-border bg-card p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         {mostrarEmojis && (
           <div className="mb-2 grid grid-cols-8 gap-1 rounded-lg border border-border bg-surface p-2 sm:grid-cols-12">
             {CHAT_EMOJIS.map((emoji) => (
@@ -187,12 +187,12 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
             ))}
           </div>
         )}
-        <form onSubmit={handleEnviar} className="flex gap-1.5">
+        <form onSubmit={handleEnviar} className="flex w-full min-w-0 items-center gap-1.5">
           <button
             type="button"
             onClick={() => setMostrarEmojis((v) => !v)}
             disabled={!listo}
-            className={`min-h-11 min-w-11 shrink-0 rounded-lg border text-xl active:opacity-90 disabled:opacity-50 ${
+            className={`min-h-11 w-11 shrink-0 rounded-lg border text-xl active:opacity-90 disabled:opacity-50 ${
               mostrarEmojis
                 ? "border-primary bg-primary/10"
                 : "border-border bg-white"
@@ -210,14 +210,18 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
             placeholder="Escribe un mensaje…"
             maxLength={2000}
             disabled={!listo}
-            className="min-h-11 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-base text-slate-800 focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 md:text-sm"
+            className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-base text-slate-800 focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 md:text-sm"
           />
           <button
             type="submit"
             disabled={!listo || enviando || !texto.trim()}
-            className="min-h-11 shrink-0 rounded-lg bg-primary px-4 text-sm font-medium text-white disabled:opacity-50 active:opacity-90"
+            aria-label="Enviar mensaje"
+            className="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-medium text-white disabled:opacity-50 active:opacity-90 sm:w-auto sm:px-4"
           >
-            Enviar
+            <span className="hidden sm:inline">{enviando ? "…" : "Enviar"}</span>
+            <span className="text-lg sm:hidden" aria-hidden>
+              ➤
+            </span>
           </button>
         </form>
       </div>
