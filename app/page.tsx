@@ -39,7 +39,7 @@ export default function Home() {
   const [editTexto, setEditTexto] = useState("")
   const [BibliaPasaje, setBibliaPasaje] = useState("")
   const [semana, setSemana] = useState(() => getSemanaActual())
-  const [tipo, setTipo] = useState("visual")
+  const [tipo, setTipo] = useState("leccion")
   const [comentariosPorFecha, setComentariosPorFecha] = useState<Record<string, string>>({})
   const [comentario, setComentario] = useState("")
   const [selectedDate, setSelectedDate] = useState(() =>
