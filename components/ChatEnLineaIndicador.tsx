@@ -36,7 +36,7 @@ export default function ChatEnLineaIndicador({ placement }: { placement: Placeme
           className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
           aria-hidden
         />
-        {cantidad === 0 ? "Conectando…" : `${cantidad} en línea`}
+        {cantidad === 0 ? "Nadie en el chat" : `${cantidad} en el chat`}
       </p>
       {cantidad > 0 && (
         <p

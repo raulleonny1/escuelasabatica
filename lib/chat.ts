@@ -26,11 +26,9 @@ const NOMBRE_KEY = "chatNombre"
 const SESSION_KEY = "chatSessionId"
 const JOIN_KEY = "chatJoinAnnounced"
 
-/** Cuánto tiempo sin latido = ya no está en línea */
-const PRESENCIA_MS = 22_000
-/** Cada cuánto renueva la propia presencia */
-const HEARTBEAT_MS = 8_000
-/** Revisa en pantalla si alguien cayó (sin esperar cambio en Firestore) */
+/** Sin actividad en el chat = ya no aparece como “en el chat” */
+const PRESENCIA_CHAT_MS = 45_000
+const HEARTBEAT_CHAT_MS = 10_000
 const TICK_UI_MS = 2_000
 
 export type ChatMessage = {
@@ -67,7 +65,6 @@ export function getChatSessionId(): string {
   return id
 }
 
-/** Un documento de presencia por nombre (evita duplicados por pestañas/recargas) */
 export function getPresenceDocId(nombre: string): string {
   const slug = nombre
     .trim()
@@ -80,15 +77,21 @@ export function getPresenceDocId(nombre: string): string {
   return slug || "usuario"
 }
 
-function filtrarUsuariosActivos(
-  docs: { id: string; nombre: string; lastSeenMs: number }[]
-): ChatUsuarioEnLinea[] {
+type PresenciaDoc = {
+  id: string
+  nombre: string
+  lastSeenMs: number
+  enChat: boolean
+}
+
+function filtrarUsuariosEnChat(docs: PresenciaDoc[]): ChatUsuarioEnLinea[] {
   const ahora = Date.now()
   const vistos = new Set<string>()
   const activos: ChatUsuarioEnLinea[] = []
 
   for (const item of docs) {
-    if (!item.lastSeenMs || ahora - item.lastSeenMs >= PRESENCIA_MS) continue
+    if (!item.enChat) continue
+    if (!item.lastSeenMs || ahora - item.lastSeenMs >= PRESENCIA_CHAT_MS) continue
     const clave = item.nombre.trim().toLowerCase()
     if (vistos.has(clave)) continue
     vistos.add(clave)
@@ -104,9 +107,13 @@ async function limpiarPresenciaObsoleta() {
   const snap = await getDocs(collection(db, "chatPresence"))
   await Promise.all(
     snap.docs.map(async (item) => {
-      const ts = item.data().lastSeen as Timestamp | undefined
+      const data = item.data()
+      const ts = data.lastSeen as Timestamp | undefined
       const ms = ts?.toMillis?.() ?? 0
-      if (!ms || ahora - ms >= PRESENCIA_MS) {
+      const enChat = data.enChat === true
+      if (!ms || ahora - ms >= PRESENCIA_CHAT_MS * 2) {
+        await deleteDoc(item.ref).catch(() => {})
+      } else if (!enChat && ahora - ms >= PRESENCIA_CHAT_MS) {
         await deleteDoc(item.ref).catch(() => {})
       }
     })
@@ -166,9 +173,9 @@ export function subscribePresenciaChat(
   onData: (usuarios: ChatUsuarioEnLinea[]) => void,
   onError: (error: Error) => void
 ): Unsubscribe {
-  let cache: { id: string; nombre: string; lastSeenMs: number }[] = []
+  let cache: PresenciaDoc[] = []
 
-  const emitir = () => onData(filtrarUsuariosActivos(cache))
+  const emitir = () => onData(filtrarUsuariosEnChat(cache))
 
   const unsub = onSnapshot(
     collection(db, "chatPresence"),
@@ -180,6 +187,7 @@ export function subscribePresenciaChat(
           id: item.id,
           nombre: (data.nombre as string) ?? "Anónimo",
           lastSeenMs: ts?.toMillis?.() ?? 0,
+          enChat: data.enChat === true,
         }
       })
       emitir()
@@ -195,7 +203,8 @@ export function subscribePresenciaChat(
   }
 }
 
-export function iniciarPresenciaChat(nombre: string): () => void {
+/** Presencia solo mientras el usuario está en la pestaña/panel del chat */
+export function iniciarPresenciaEnChat(nombre: string, sessionId: string): () => void {
   const nombreLimpio = nombre.trim().slice(0, 32)
   const presenceId = getPresenceDocId(nombreLimpio)
   const ref = doc(db, "chatPresence", presenceId)
@@ -205,33 +214,40 @@ export function iniciarPresenciaChat(nombre: string): () => void {
       ref,
       {
         nombre: nombreLimpio,
+        sessionId,
+        enChat: true,
+        lastSeen: serverTimestamp(),
+        lastActiveInChat: serverTimestamp(),
+      },
+      { merge: true }
+    ).catch(() => {})
+  }
+
+  const salirDelChat = () => {
+    setDoc(
+      ref,
+      {
+        enChat: false,
         lastSeen: serverTimestamp(),
       },
       { merge: true }
     ).catch(() => {})
   }
 
-  const salir = () => {
-    deleteDoc(ref).catch(() => {})
-  }
-
   actualizar()
   limpiarPresenciaObsoleta().catch(() => {})
 
-  const heartbeat = setInterval(actualizar, HEARTBEAT_MS)
-  const limpieza = setInterval(() => {
-    limpiarPresenciaObsoleta().catch(() => {})
-  }, 20_000)
+  const heartbeat = setInterval(actualizar, HEARTBEAT_CHAT_MS)
 
   const onVisible = () => {
     if (document.visibilityState === "hidden") {
-      salir()
+      salirDelChat()
     } else {
       actualizar()
     }
   }
 
-  const onPageHide = () => salir()
+  const onPageHide = () => salirDelChat()
 
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", onVisible)
@@ -242,15 +258,30 @@ export function iniciarPresenciaChat(nombre: string): () => void {
 
   return () => {
     clearInterval(heartbeat)
-    clearInterval(limpieza)
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", onVisible)
     }
     if (typeof window !== "undefined") {
       window.removeEventListener("pagehide", onPageHide)
     }
-    salir()
+    salirDelChat()
   }
+}
+
+/** Latido al escribir o enviar (sigue contando como interactuando) */
+export function pulsoActividadEnChat(nombre: string) {
+  const nombreLimpio = nombre.trim().slice(0, 32)
+  const ref = doc(db, "chatPresence", getPresenceDocId(nombreLimpio))
+  setDoc(
+    ref,
+    {
+      nombre: nombreLimpio,
+      enChat: true,
+      lastSeen: serverTimestamp(),
+      lastActiveInChat: serverTimestamp(),
+    },
+    { merge: true }
+  ).catch(() => {})
 }
 
 export function formatHoraChat(date: Date | null): string {

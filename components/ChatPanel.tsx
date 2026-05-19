@@ -1,25 +1,42 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { CHAT_EMOJIS } from "@/lib/chatEmojis"
 import {
+  anunciarEntradaChat,
   enviarMensajeChat,
   formatHoraChat,
   getChatSessionId,
   getPresenceDocId,
+  iniciarPresenciaEnChat,
+  pulsoActividadEnChat,
   subscribeChatMessages,
   subscribePresenciaChat,
   type ChatMessage,
   type ChatUsuarioEnLinea,
 } from "@/lib/chat"
+import {
+  emitirNoLeidos,
+  mensajeEsParaMi,
+  notificarMensajeChat,
+  reproducirSonidoMensajeDirecto,
+  solicitarPermisoNotificaciones,
+  actualizarTituloNoLeidos,
+} from "@/lib/chatNotificaciones"
 
 interface ChatPanelProps {
   nombre: string
+  activo?: boolean
   onCambiarNombre?: () => void
   className?: string
 }
 
-export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: ChatPanelProps) {
+export default function ChatPanel({
+  nombre,
+  activo = false,
+  onCambiarNombre,
+  className = "",
+}: ChatPanelProps) {
   const [mensajes, setMensajes] = useState<ChatMessage[]>([])
   const [enLinea, setEnLinea] = useState<ChatUsuarioEnLinea[]>([])
   const [texto, setTexto] = useState("")
@@ -30,15 +47,89 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
   const listaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [sessionId, setSessionId] = useState("")
+  const ultimoIdVistoRef = useRef<string | null>(null)
+  const historialListoRef = useRef(false)
+  const entradaAnunciadaRef = useRef(false)
+  const activoRef = useRef(activo)
+  const otrosEnLineaRef = useRef(0)
+
+  useEffect(() => {
+    activoRef.current = activo
+  }, [activo])
 
   useEffect(() => {
     setSessionId(getChatSessionId())
   }, [])
 
-  function insertarEmoji(emoji: string) {
-    setTexto((prev) => prev + emoji)
-    inputRef.current?.focus()
-  }
+  useEffect(() => {
+    if (!activo || !sessionId) return
+    solicitarPermisoNotificaciones().catch(() => {})
+    if (!entradaAnunciadaRef.current) {
+      entradaAnunciadaRef.current = true
+      anunciarEntradaChat(nombre, sessionId).catch(() => {})
+    }
+    return iniciarPresenciaEnChat(nombre, sessionId)
+  }, [activo, nombre, sessionId])
+
+  const procesarMensajesNuevos = useCallback(
+    (data: ChatMessage[]) => {
+      const mensajesTexto = data.filter((m) => m.tipo === "message")
+      const ultimo = mensajesTexto[mensajesTexto.length - 1]
+      if (!ultimo) return
+
+      const miNombre = nombre.trim().toLowerCase()
+
+      if (!historialListoRef.current) {
+        historialListoRef.current = true
+        ultimoIdVistoRef.current = ultimo.id
+        return
+      }
+
+      if (activoRef.current) {
+        ultimoIdVistoRef.current = ultimo.id
+        emitirNoLeidos(0)
+        actualizarTituloNoLeidos(0)
+        return
+      }
+
+      if (ultimo.nombre.trim().toLowerCase() === miNombre) {
+        ultimoIdVistoRef.current = ultimo.id
+        return
+      }
+
+      if (ultimoIdVistoRef.current === ultimo.id) return
+
+      const previo = ultimoIdVistoRef.current
+      let noLeidos = 1
+      if (previo) {
+        const idx = data.findIndex((m) => m.id === previo)
+        if (idx >= 0) {
+          noLeidos = data
+            .slice(idx + 1)
+            .filter(
+              (m) =>
+                m.tipo === "message" && m.nombre.trim().toLowerCase() !== miNombre
+            ).length
+        }
+      }
+
+      emitirNoLeidos(noLeidos)
+      actualizarTituloNoLeidos(noLeidos)
+
+      if (mensajeEsParaMi(ultimo.texto, nombre, otrosEnLineaRef.current)) {
+        reproducirSonidoMensajeDirecto()
+        notificarMensajeChat(
+          ultimo.nombre,
+          ultimo.texto,
+          nombre,
+          otrosEnLineaRef.current
+        )
+      }
+
+      ultimoIdVistoRef.current = ultimo.id
+    },
+    [nombre]
+  )
 
   useEffect(() => {
     if (!sessionId) return
@@ -47,6 +138,7 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
 
     const unsubMsg = subscribeChatMessages(
       (data) => {
+        procesarMensajesNuevos(data)
         setMensajes(data)
         setError(null)
       },
@@ -59,7 +151,15 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
       unsubMsg()
       unsubPres()
     }
-  }, [nombre, sessionId])
+  }, [nombre, sessionId, procesarMensajesNuevos])
+
+  useEffect(() => {
+    if (!activo || mensajes.length === 0) return
+    const ultimo = mensajes[mensajes.length - 1]
+    ultimoIdVistoRef.current = ultimo.id
+    emitirNoLeidos(0)
+    actualizarTituloNoLeidos(0)
+  }, [activo, mensajes])
 
   useEffect(() => {
     const el = listaRef.current
@@ -67,11 +167,18 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
     el.scrollTop = el.scrollHeight
   }, [mensajes])
 
+  function insertarEmoji(emoji: string) {
+    setTexto((prev) => prev + emoji)
+    inputRef.current?.focus()
+    pulsoActividadEnChat(nombre)
+  }
+
   async function handleEnviar(e: React.FormEvent) {
     e.preventDefault()
     const limpio = texto.trim()
     if (!limpio || enviando) return
     setEnviando(true)
+    pulsoActividadEnChat(nombre)
     try {
       await enviarMensajeChat(nombre, limpio, sessionId)
       setTexto("")
@@ -85,6 +192,10 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
 
   const miPresenceId = getPresenceDocId(nombre)
   const otrosEnLinea = enLinea.filter((u) => u.presenceId !== miPresenceId)
+
+  useEffect(() => {
+    otrosEnLineaRef.current = otrosEnLinea.length
+  }, [otrosEnLinea.length])
 
   return (
     <section
@@ -108,13 +219,15 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
             </p>
           </div>
           <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-            {enLinea.length} en línea
+            {otrosEnLinea.length} en el chat
           </span>
         </div>
-        {otrosEnLinea.length > 0 && (
+        {otrosEnLinea.length > 0 ? (
           <p className="mt-1 text-[11px] leading-snug text-slate-500">
-            Conectados: {otrosEnLinea.map((u) => u.nombre).join(", ")}
+            Interactuando: {otrosEnLinea.map((u) => u.nombre).join(", ")}
           </p>
+        ) : (
+          <p className="mt-1 text-[11px] text-slate-400">Nadie más en el chat ahora</p>
         )}
       </div>
 
@@ -206,8 +319,11 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
             ref={inputRef}
             type="text"
             value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            placeholder="Escribe un mensaje…"
+            onChange={(e) => {
+              setTexto(e.target.value)
+              if (e.target.value.trim()) pulsoActividadEnChat(nombre)
+            }}
+            placeholder={`Escribe un mensaje… @${nombre.split(/\s+/)[0]} para avisar`}
             maxLength={2000}
             disabled={!listo}
             className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-white px-3 py-2 text-base text-slate-800 focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 md:text-sm"

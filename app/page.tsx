@@ -23,12 +23,11 @@ import {
   getSemanaActual,
 } from "@/lib/semana"
 import {
-  anunciarEntradaChat,
   getChatSessionId,
   guardarNombreChat,
-  iniciarPresenciaChat,
   leerNombreChat,
 } from "@/lib/chat"
+import { CHAT_ABRIR_EVENT, CHAT_NO_LEIDOS_EVENT } from "@/lib/chatNotificaciones"
 import { safeLocalRemove, safeSessionRemove } from "@/lib/storage"
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
@@ -54,6 +53,7 @@ export default function Home() {
   const [leccionJump, setLeccionJump] = useState(0)
   const [chatNombre, setChatNombre] = useState<string | null>(null)
   const [chatNombreListo, setChatNombreListo] = useState(false)
+  const [chatNoLeidos, setChatNoLeidos] = useState(0)
 
   function formatDateDMY(dateStr: string) {
     if (!dateStr) return ""
@@ -74,11 +74,19 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (!chatNombre) return
-    const sessionId = getChatSessionId()
-    anunciarEntradaChat(chatNombre, sessionId).catch(() => {})
-    return iniciarPresenciaChat(chatNombre)
-  }, [chatNombre])
+    const onNoLeidos = (e: Event) => {
+      const det = (e as CustomEvent<{ cantidad: number }>).detail
+      setChatNoLeidos(det?.cantidad ?? 0)
+    }
+    const onAbrirChat = () => setMobileTab("chat")
+
+    window.addEventListener(CHAT_NO_LEIDOS_EVENT, onNoLeidos)
+    window.addEventListener(CHAT_ABRIR_EVENT, onAbrirChat)
+    return () => {
+      window.removeEventListener(CHAT_NO_LEIDOS_EVENT, onNoLeidos)
+      window.removeEventListener(CHAT_ABRIR_EVENT, onAbrirChat)
+    }
+  }, [])
 
   function handleConfirmarNombreChat(nombre: string) {
     guardarNombreChat(nombre)
@@ -270,6 +278,7 @@ export default function Home() {
         {chatNombre && (
           <ChatPanel
             nombre={chatNombre}
+            activo
             onCambiarNombre={handleCambiarNombreChat}
             className="hidden lg:flex lg:min-h-[280px] lg:max-h-[340px]"
           />
@@ -284,6 +293,7 @@ export default function Home() {
         >
           <ChatPanel
             nombre={chatNombre}
+            activo={mobileTab === "chat"}
             onCambiarNombre={handleCambiarNombreChat}
             className="min-h-0 flex-1"
           />
@@ -318,11 +328,18 @@ export default function Home() {
         <button
           type="button"
           onClick={() => setMobileTab("chat")}
-          className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition active:bg-slate-100 ${
+          className={`relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition active:bg-slate-100 ${
             mobileTab === "chat" ? "text-primary bg-primary/5" : "text-slate-600"
           }`}
         >
-          <span className="text-lg" aria-hidden>💬</span>
+          <span className="relative text-lg" aria-hidden>
+            💬
+            {chatNoLeidos > 0 && (
+              <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                {chatNoLeidos > 9 ? "9+" : chatNoLeidos}
+              </span>
+            )}
+          </span>
           Chat
         </button>
       </nav>
