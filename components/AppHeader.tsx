@@ -1,6 +1,7 @@
 "use client"
 
 import ChatEnLineaIndicador from "@/components/ChatEnLineaIndicador"
+import PwaInstallButton from "@/components/PwaInstallButton"
 
 export default function AppHeader() {
   return (
@@ -18,6 +19,7 @@ export default function AppHeader() {
             Lección del trimestre · Estudio bíblico diario
           </p>
           <ChatEnLineaIndicador placement="mobile" />
+          <PwaInstallButton />
         </div>
 
         <ChatEnLineaIndicador placement="desktop" />

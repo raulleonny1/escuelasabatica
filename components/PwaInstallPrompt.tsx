@@ -1,43 +1,38 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
-
-const DISMISS_KEY = "pwa-install-dismissed"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import {
+  DISMISS_KEY,
+  PWA_MOSTRAR_EVENT,
+  esAppleDispositivo,
+  esAndroid,
+  esTablet,
+  etiquetaDispositivo,
+  fueInstalacionRechazada,
+  getPlataformaPwa,
+  yaInstaladaPwa,
+} from "@/lib/pwa"
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>
 }
 
-function esIOS(): boolean {
-  if (typeof navigator === "undefined") return false
-  return /iphone|ipad|ipod/i.test(navigator.userAgent)
-}
-
-function yaInstalada(): boolean {
-  if (typeof window === "undefined") return false
-  if (window.matchMedia("(display-mode: standalone)").matches) return true
-  return Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
-}
-
-function fueRechazada(): boolean {
-  if (typeof window === "undefined") return false
-  try {
-    return window.localStorage.getItem(DISMISS_KEY) === "1"
-  } catch {
-    return false
-  }
-}
+type ModoBanner = "nativo" | "ios" | "android-manual" | "desktop-manual"
 
 export default function PwaInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [visible, setVisible] = useState(false)
-  const [modoIOS, setModoIOS] = useState(false)
-  const [modoManual, setModoManual] = useState(false)
+  const [modo, setModo] = useState<ModoBanner>("desktop-manual")
   const [instalando, setInstalando] = useState(false)
   const bipRecibido = useRef(false)
-
   const [montado, setMontado] = useState(false)
+
+  const mostrarBanner = useCallback((nuevoModo: ModoBanner) => {
+    if (yaInstaladaPwa()) return
+    setModo(nuevoModo)
+    setVisible(true)
+  }, [])
 
   const cerrar = useCallback((recordar = true) => {
     setVisible(false)
@@ -45,7 +40,7 @@ export default function PwaInstallPrompt() {
       try {
         window.localStorage.setItem(DISMISS_KEY, "1")
       } catch {
-        // modo privado u otro bloqueo
+        // ignorar
       }
     }
   }, [])
@@ -55,39 +50,56 @@ export default function PwaInstallPrompt() {
   }, [])
 
   useEffect(() => {
-    if (!montado || yaInstalada() || fueRechazada()) return
+    if (!montado) return
+
+    const onMostrar = () => {
+      if (yaInstaladaPwa()) return
+      if (deferredPrompt) mostrarBanner("nativo")
+      else if (esAppleDispositivo()) mostrarBanner("ios")
+      else if (esAndroid()) mostrarBanner("android-manual")
+      else mostrarBanner("desktop-manual")
+    }
+
+    window.addEventListener(PWA_MOSTRAR_EVENT, onMostrar)
+    return () => window.removeEventListener(PWA_MOSTRAR_EVENT, onMostrar)
+  }, [montado, deferredPrompt, mostrarBanner])
+
+  useEffect(() => {
+    if (!montado || yaInstaladaPwa() || fueInstalacionRechazada()) return
 
     const onBip = (e: Event) => {
       e.preventDefault()
       bipRecibido.current = true
       setDeferredPrompt(e as BeforeInstallPromptEvent)
-      setModoIOS(false)
-      setModoManual(false)
-      setVisible(true)
+      mostrarBanner("nativo")
     }
 
     window.addEventListener("beforeinstallprompt", onBip)
 
-    const timerIOS = window.setTimeout(() => {
-      if (bipRecibido.current || yaInstalada() || fueRechazada()) return
-      if (esIOS()) {
-        setModoIOS(true)
-        setVisible(true)
-      }
-    }, 2000)
+    const plataforma = getPlataformaPwa()
 
-    const timerManual = window.setTimeout(() => {
-      if (bipRecibido.current || yaInstalada() || fueRechazada() || esIOS()) return
-      setModoManual(true)
-      setVisible(true)
-    }, 4500)
+    const timerApple = window.setTimeout(() => {
+      if (bipRecibido.current || yaInstaladaPwa() || fueInstalacionRechazada()) return
+      if (plataforma === "ios") mostrarBanner("ios")
+    }, 1200)
+
+    const timerAndroid = window.setTimeout(() => {
+      if (bipRecibido.current || yaInstaladaPwa() || fueInstalacionRechazada()) return
+      if (plataforma === "android") mostrarBanner("android-manual")
+    }, 2500)
+
+    const timerDesktop = window.setTimeout(() => {
+      if (bipRecibido.current || yaInstaladaPwa() || fueInstalacionRechazada()) return
+      if (plataforma === "desktop") mostrarBanner("desktop-manual")
+    }, 4000)
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBip)
-      window.clearTimeout(timerIOS)
-      window.clearTimeout(timerManual)
+      window.clearTimeout(timerApple)
+      window.clearTimeout(timerAndroid)
+      window.clearTimeout(timerDesktop)
     }
-  }, [montado])
+  }, [montado, mostrarBanner])
 
   async function instalar() {
     if (!deferredPrompt) return
@@ -104,11 +116,60 @@ export default function PwaInstallPrompt() {
     }
   }
 
+  function textoInstrucciones(): ReactNode {
+    const esTab = esTablet()
+    if (modo === "ios") {
+      if (esTab) {
+        return (
+          <>
+            En <strong>Safari</strong> o <strong>Chrome</strong> en tu iPad: toca el icono{" "}
+            <strong>Compartir</strong> (cuadrado con flecha) y elige{" "}
+            <strong>Añadir a pantalla de inicio</strong>.
+          </>
+        )
+      }
+      return (
+        <>
+          En <strong>Safari</strong> o <strong>Chrome</strong> en tu iPhone: toca{" "}
+          <strong>Compartir</strong> y luego <strong>Añadir a pantalla de inicio</strong>.
+        </>
+      )
+    }
+    if (modo === "android-manual") {
+      if (esTab) {
+        return (
+          <>
+            En <strong>Chrome</strong>: menú <strong>⋮</strong> →{" "}
+            <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.
+            También puede aparecer un aviso en la barra de direcciones.
+          </>
+        )
+      }
+      return (
+        <>
+          En <strong>Chrome</strong>: menú <strong>⋮</strong> →{" "}
+          <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.
+        </>
+      )
+    }
+    if (modo === "desktop-manual") {
+      return (
+        <>
+          En Chrome o Edge: icono <strong>Instalar</strong> en la barra de direcciones, o menú{" "}
+          <strong>⋮</strong> → <strong>Instalar Escuela Sabática</strong>.
+        </>
+      )
+    }
+    return <>Accede más rápido desde tu pantalla de inicio, como una aplicación.</>
+  }
+
   if (!montado || !visible) return null
+
+  const puedeInstalarNativo = modo === "nativo" && deferredPrompt
 
   return (
     <div
-      className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-50 mx-auto max-w-md lg:bottom-4 lg:left-auto lg:right-4"
+      className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom))] left-3 right-3 z-[55] mx-auto max-w-md lg:bottom-4 lg:left-auto lg:right-4"
       role="dialog"
       aria-labelledby="pwa-install-title"
     >
@@ -121,26 +182,15 @@ export default function PwaInstallPrompt() {
             <p id="pwa-install-title" className="font-display text-base font-semibold text-primary">
               Instalar Escuela Sabática
             </p>
-            <p className="mt-1 text-sm leading-snug text-slate-600">
-              {modoIOS ? (
-                <>
-                  En Safari: toca <strong>Compartir</strong> y luego{" "}
-                  <strong>Añadir a pantalla de inicio</strong> para abrirla como app.
-                </>
-              ) : modoManual ? (
-                <>
-                  En el menú del navegador (<strong>⋮</strong> o <strong>⋯</strong>), elige{" "}
-                  <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.
-                </>
-              ) : (
-                <>Accede más rápido desde tu pantalla de inicio, como una aplicación.</>
-              )}
+            <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-muted">
+              {etiquetaDispositivo()}
             </p>
+            <p className="mt-1 text-sm leading-snug text-slate-600">{textoInstrucciones()}</p>
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {!modoIOS && !modoManual && deferredPrompt && (
+          {puedeInstalarNativo && (
             <button
               type="button"
               onClick={instalar}
@@ -150,7 +200,7 @@ export default function PwaInstallPrompt() {
               {instalando ? "Instalando…" : "Sí, instalar"}
             </button>
           )}
-          {(modoIOS || modoManual) && (
+          {!puedeInstalarNativo && (
             <button
               type="button"
               onClick={() => cerrar(true)}
