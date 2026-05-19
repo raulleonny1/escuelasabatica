@@ -59,44 +59,6 @@ export default function NotasPanel({
 
   return (
     <>
-      {/* Nueva nota — escribir del día elegido */}
-      <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Nueva nota</p>
-        <label className="mb-1 block text-xs text-slate-500">Día de la semana {semana}</label>
-        <input
-          type="date"
-          value={selectedDate}
-          min={diasSemana[0]?.fecha}
-          max={diasSemana[6]?.fecha}
-          onChange={(e) => seleccionarDia(e.target.value)}
-          className={inputClass}
-        />
-        {selectedDate && (
-          <div className="mt-2 space-y-2">
-            <p className="text-xs text-primary font-medium">
-              Nota para {formatDateDMY(selectedDate)}
-            </p>
-            <textarea
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              placeholder="Escribe tu reflexión del día..."
-              className={`${inputClass} min-h-28 resize-none`}
-            />
-            <button
-              type="button"
-              className="min-h-12 w-full rounded-lg bg-primary py-3 text-base font-medium text-white shadow-md shadow-primary/20 active:opacity-90 disabled:opacity-50"
-              disabled={guardando || !comentario.trim()}
-              onClick={() => onGuardar(selectedDate, comentario)}
-            >
-              {guardando ? "Guardando..." : "Guardar nota del día"}
-            </button>
-          </div>
-        )}
-        {!selectedDate && (
-          <p className="mt-2 text-xs text-muted">Elige un día arriba o toca un día en Mis notas.</p>
-        )}
-      </section>
-
       {/* Mis notas — columnas de la semana */}
       <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
         <div className="mb-2 flex items-center justify-between">
@@ -227,6 +189,44 @@ export default function NotasPanel({
               </div>
             )}
           </>
+        )}
+      </section>
+
+      {/* Nueva nota — escribir del día elegido */}
+      <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Nueva nota</p>
+        <label className="mb-1 block text-xs text-slate-500">Día de la semana {semana}</label>
+        <input
+          type="date"
+          value={selectedDate}
+          min={diasSemana[0]?.fecha}
+          max={diasSemana[6]?.fecha}
+          onChange={(e) => seleccionarDia(e.target.value)}
+          className={inputClass}
+        />
+        {selectedDate && (
+          <div className="mt-2 space-y-2">
+            <p className="text-xs text-primary font-medium">
+              Nota para {formatDateDMY(selectedDate)}
+            </p>
+            <textarea
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              placeholder="Escribe tu reflexión del día..."
+              className={`${inputClass} min-h-28 resize-none`}
+            />
+            <button
+              type="button"
+              className="min-h-12 w-full rounded-lg bg-primary py-3 text-base font-medium text-white shadow-md shadow-primary/20 active:opacity-90 disabled:opacity-50"
+              disabled={guardando || !comentario.trim()}
+              onClick={() => onGuardar(selectedDate, comentario)}
+            >
+              {guardando ? "Guardando..." : "Guardar nota del día"}
+            </button>
+          </div>
+        )}
+        {!selectedDate && (
+          <p className="mt-2 text-xs text-muted">Toca un día en Mis notas de arriba.</p>
         )}
       </section>
     </>

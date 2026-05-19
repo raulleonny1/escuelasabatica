@@ -1,5 +1,32 @@
 /** Sábado de inicio del trimestre (ajusta si cambia el calendario) */
 export const TRIMESTRE_INICIO = "2026-03-28"
+export const TOTAL_SEMANAS = 13
+
+export function fechaLocalHoy(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+/** Semana de lección según la fecha de hoy (1–13) */
+export function getSemanaActual(totalSemanas = TOTAL_SEMANAS): number {
+  const inicio = new Date(TRIMESTRE_INICIO + "T12:00:00")
+  const hoy = new Date(fechaLocalHoy() + "T12:00:00")
+  const diffDias = Math.floor((hoy.getTime() - inicio.getTime()) / (24 * 60 * 60 * 1000))
+  if (diffDias < 0) return 1
+  const semana = Math.floor(diffDias / 7) + 1
+  return Math.min(Math.max(semana, 1), totalSemanas)
+}
+
+/** Hoy si cae en la semana; si no, el sábado de esa semana */
+export function getFechaDestacadaEnSemana(semana: number): string {
+  const hoy = fechaLocalHoy()
+  const dias = getFechasSemana(semana)
+  if (dias.some((d) => d.fecha === hoy)) return hoy
+  return dias[0]?.fecha ?? hoy
+}
 
 export type DiaSemana = {
   fecha: string

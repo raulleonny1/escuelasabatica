@@ -14,26 +14,44 @@ import {
 
 import LeccionControls from "@/components/LeccionControls"
 import NotasPanel from "@/components/NotasPanel"
-import { getFechasSemana } from "@/lib/semana"
+import ChatNombreModal from "@/components/ChatNombreModal"
+import ChatPanel from "@/components/ChatPanel"
+import {
+  getFechaDestacadaEnSemana,
+  getFechasSemana,
+  getSemanaActual,
+} from "@/lib/semana"
+import {
+  anunciarEntradaChat,
+  getChatSessionId,
+  guardarNombreChat,
+  iniciarPresenciaChat,
+  leerNombreChat,
+} from "@/lib/chat"
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
 
-type MobileTab = "pdf" | "estudio"
+type MobileTab = "pdf" | "estudio" | "chat"
 
 export default function Home() {
   const [showModal, setShowModal] = useState(false)
   const [editFecha, setEditFecha] = useState<string | null>(null)
   const [editTexto, setEditTexto] = useState("")
   const [BibliaPasaje, setBibliaPasaje] = useState("")
-  const [semana, setSemana] = useState(1)
+  const [semana, setSemana] = useState(() => getSemanaActual())
   const [tipo, setTipo] = useState("visual")
   const [comentariosPorFecha, setComentariosPorFecha] = useState<Record<string, string>>({})
   const [comentario, setComentario] = useState("")
-  const [selectedDate, setSelectedDate] = useState("")
+  const [selectedDate, setSelectedDate] = useState(() =>
+    getFechaDestacadaEnSemana(getSemanaActual())
+  )
   const [cargandoComentarios, setCargandoComentarios] = useState(true)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [mobileTab, setMobileTab] = useState<MobileTab>("pdf")
+  const [leccionJump, setLeccionJump] = useState(0)
+  const [chatNombre, setChatNombre] = useState<string | null>(null)
+  const [chatNombreListo, setChatNombreListo] = useState(false)
 
   function formatDateDMY(dateStr: string) {
     if (!dateStr) return ""
@@ -45,6 +63,30 @@ export default function Home() {
     setComentario((prev) => (prev ? prev + "\n" + v : v))
     setBibliaPasaje(v)
     setMobileTab("estudio")
+  }
+
+  useEffect(() => {
+    const guardado = leerNombreChat()
+    setChatNombre(guardado || null)
+    setChatNombreListo(true)
+  }, [])
+
+  useEffect(() => {
+    if (!chatNombre) return
+    const sessionId = getChatSessionId()
+    anunciarEntradaChat(chatNombre, sessionId).catch(() => {})
+    return iniciarPresenciaChat(chatNombre, sessionId)
+  }, [chatNombre])
+
+  function handleConfirmarNombreChat(nombre: string) {
+    guardarNombreChat(nombre)
+    setChatNombre(nombre)
+  }
+
+  function handleCambiarNombreChat() {
+    localStorage.removeItem("chatNombre")
+    sessionStorage.removeItem("chatJoinAnnounced")
+    setChatNombre(null)
   }
 
   useEffect(() => {
@@ -86,8 +128,9 @@ export default function Home() {
     if (!dias.length) return
     const enRango = dias.some((d) => d.fecha === selectedDate)
     if (!enRango) {
-      setSelectedDate(dias[0].fecha)
-      setComentario(comentariosPorFecha[dias[0].fecha] ?? "")
+      const fecha = getFechaDestacadaEnSemana(semana)
+      setSelectedDate(fecha)
+      setComentario(comentariosPorFecha[fecha] ?? "")
     }
   }, [semana, selectedDate, comentariosPorFecha])
 
@@ -138,6 +181,8 @@ export default function Home() {
   }
 
   const pdfUrl = `/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`
+  const pdfViewerKey =
+    tipo === "leccion" ? `${semana}-leccion-${leccionJump}` : `${semana}-${tipo}`
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
@@ -147,7 +192,13 @@ export default function Home() {
         }`}
       >
         <div className="shrink-0 border-b border-border bg-card p-2 lg:hidden">
-          <LeccionControls semana={semana} setSemana={setSemana} tipo={tipo} setTipo={setTipo} />
+          <LeccionControls
+            semana={semana}
+            setSemana={setSemana}
+            tipo={tipo}
+            setTipo={setTipo}
+            onLeccionClick={() => setLeccionJump((n) => n + 1)}
+          />
         </div>
         {BibliaPasaje && (
           <div className="border-b border-accent/30 bg-accent-soft px-5 py-4">
@@ -165,7 +216,12 @@ export default function Home() {
           </div>
         )}
         <div className="relative min-h-0 flex-1 w-full">
-          <PdfViewer key={`${semana}-${tipo}`} url={pdfUrl} />
+          <PdfViewer
+            key={pdfViewerKey}
+            url={pdfUrl}
+            irAlDiaLectura={tipo === "leccion"}
+            semana={semana}
+          />
         </div>
       </div>
 
@@ -175,7 +231,13 @@ export default function Home() {
         }`}
       >
         <div className="hidden lg:block">
-          <LeccionControls semana={semana} setSemana={setSemana} tipo={tipo} setTipo={setTipo} />
+          <LeccionControls
+            semana={semana}
+            setSemana={setSemana}
+            tipo={tipo}
+            setTipo={setTipo}
+            onLeccionClick={() => setLeccionJump((n) => n + 1)}
+          />
         </div>
 
         <NotasPanel
@@ -197,10 +259,32 @@ export default function Home() {
           onVerTodos={() => setShowModal(true)}
         />
 
+        {chatNombre && (
+          <ChatPanel
+            nombre={chatNombre}
+            onCambiarNombre={handleCambiarNombreChat}
+            className="hidden lg:flex lg:min-h-[280px] lg:max-h-[340px]"
+          />
+        )}
+
         <section className="min-h-40 max-h-56 custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm lg:max-h-none lg:h-50">
           <Biblia agregarVersiculo={agregarVersiculo} />
         </section>
       </aside>
+
+      {chatNombre && (
+        <div
+          className={`flex min-h-0 flex-1 flex-col bg-surface p-3 md:p-4 lg:hidden ${
+            mobileTab === "chat" ? "flex" : "hidden"
+          }`}
+        >
+          <ChatPanel
+            nombre={chatNombre}
+            onCambiarNombre={handleCambiarNombreChat}
+            className="min-h-0 flex-1"
+          />
+        </div>
+      )}
 
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-border bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.08)] lg:hidden"
@@ -227,7 +311,21 @@ export default function Home() {
           <span className="text-lg" aria-hidden>📖</span>
           Biblia y notas
         </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("chat")}
+          className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition active:bg-slate-100 ${
+            mobileTab === "chat" ? "text-primary bg-primary/5" : "text-slate-600"
+          }`}
+        >
+          <span className="text-lg" aria-hidden>💬</span>
+          Chat
+        </button>
       </nav>
+
+      {chatNombreListo && !chatNombre && (
+        <ChatNombreModal onConfirm={handleConfirmarNombreChat} />
+      )}
 
       {/* Modal */}
       {showModal && (

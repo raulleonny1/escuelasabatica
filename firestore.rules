@@ -5,5 +5,13 @@ service cloud.firestore {
     match /comentarios/{fecha} {
       allow read, write: if true;
     }
+
+    match /chatMessages/{messageId} {
+      allow read, write: if true;
+    }
+
+    match /chatPresence/{sessionId} {
+      allow read, write: if true;
+    }
   }
 }

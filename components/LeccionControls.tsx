@@ -15,9 +15,20 @@ interface LeccionControlsProps {
   setSemana: (n: number) => void
   tipo: string
   setTipo: (t: string) => void
+  onLeccionClick?: () => void
 }
 
-export default function LeccionControls({ semana, setSemana, tipo, setTipo }: LeccionControlsProps) {
+export default function LeccionControls({
+  semana,
+  setSemana,
+  tipo,
+  setTipo,
+  onLeccionClick,
+}: LeccionControlsProps) {
+  function elegirTipo(id: string) {
+    setTipo(id)
+    if (id === "leccion") onLeccionClick?.()
+  }
   return (
     <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Lección</p>
@@ -40,7 +51,7 @@ export default function LeccionControls({ semana, setSemana, tipo, setTipo }: Le
           <button
             key={t.id}
             type="button"
-            onClick={() => setTipo(t.id)}
+            onClick={() => elegirTipo(t.id)}
             className={`min-h-11 rounded-lg px-2 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${
               tipo === t.id
                 ? "bg-primary text-white shadow-md shadow-primary/25"
