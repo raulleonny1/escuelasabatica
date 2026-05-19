@@ -21,7 +21,12 @@ function yaInstalada(): boolean {
 }
 
 function fueRechazada(): boolean {
-  return localStorage.getItem(DISMISS_KEY) === "1"
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem(DISMISS_KEY) === "1"
+  } catch {
+    return false
+  }
 }
 
 export default function PwaInstallPrompt() {
@@ -32,13 +37,25 @@ export default function PwaInstallPrompt() {
   const [instalando, setInstalando] = useState(false)
   const bipRecibido = useRef(false)
 
+  const [montado, setMontado] = useState(false)
+
   const cerrar = useCallback((recordar = true) => {
     setVisible(false)
-    if (recordar) localStorage.setItem(DISMISS_KEY, "1")
+    if (recordar) {
+      try {
+        window.localStorage.setItem(DISMISS_KEY, "1")
+      } catch {
+        // modo privado u otro bloqueo
+      }
+    }
   }, [])
 
   useEffect(() => {
-    if (yaInstalada() || fueRechazada()) return
+    setMontado(true)
+  }, [])
+
+  useEffect(() => {
+    if (!montado || yaInstalada() || fueRechazada()) return
 
     const onBip = (e: Event) => {
       e.preventDefault()
@@ -70,7 +87,7 @@ export default function PwaInstallPrompt() {
       window.clearTimeout(timerIOS)
       window.clearTimeout(timerManual)
     }
-  }, [])
+  }, [montado])
 
   async function instalar() {
     if (!deferredPrompt) return
@@ -87,7 +104,7 @@ export default function PwaInstallPrompt() {
     }
   }
 
-  if (!visible) return null
+  if (!montado || !visible) return null
 
   return (
     <div

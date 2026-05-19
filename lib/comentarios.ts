@@ -7,12 +7,12 @@ import {
   setDoc,
 } from "firebase/firestore"
 import { db } from "./firebase"
+import { safeLocalGet, safeLocalSet } from "./storage"
 
 const STORAGE_KEY = "comentariosPorFecha"
 
 export function leerComentariosLocal(): Record<string, string> {
-  if (typeof window === "undefined") return {}
-  const saved = localStorage.getItem(STORAGE_KEY)
+  const saved = safeLocalGet(STORAGE_KEY)
   if (!saved) return {}
   try {
     return JSON.parse(saved)
@@ -22,7 +22,7 @@ export function leerComentariosLocal(): Record<string, string> {
 }
 
 export function guardarComentariosLocal(data: Record<string, string>) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  safeLocalSet(STORAGE_KEY, JSON.stringify(data))
 }
 
 export function subscribeComentarios(

@@ -14,6 +14,13 @@ import {
   type Unsubscribe,
 } from "firebase/firestore"
 import { db } from "./firebase"
+import {
+  nuevoIdSesion,
+  safeLocalGet,
+  safeLocalSet,
+  safeSessionGet,
+  safeSessionSet,
+} from "./storage"
 
 const NOMBRE_KEY = "chatNombre"
 const SESSION_KEY = "chatSessionId"
@@ -40,12 +47,11 @@ export type ChatUsuarioEnLinea = {
 }
 
 export function leerNombreChat(): string {
-  if (typeof window === "undefined") return ""
-  return localStorage.getItem(NOMBRE_KEY)?.trim() ?? ""
+  return safeLocalGet(NOMBRE_KEY)?.trim() ?? ""
 }
 
 export function guardarNombreChat(nombre: string) {
-  localStorage.setItem(NOMBRE_KEY, nombre.trim())
+  safeLocalSet(NOMBRE_KEY, nombre.trim())
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("chat-nombre-guardado"))
   }
@@ -53,10 +59,10 @@ export function guardarNombreChat(nombre: string) {
 
 export function getChatSessionId(): string {
   if (typeof window === "undefined") return ""
-  let id = sessionStorage.getItem(SESSION_KEY)
+  let id = safeSessionGet(SESSION_KEY)
   if (!id) {
-    id = crypto.randomUUID()
-    sessionStorage.setItem(SESSION_KEY, id)
+    id = nuevoIdSesion()
+    safeSessionSet(SESSION_KEY, id)
   }
   return id
 }
@@ -120,7 +126,7 @@ export async function enviarMensajeChat(nombre: string, texto: string, sessionId
 }
 
 export async function anunciarEntradaChat(nombre: string, sessionId: string) {
-  if (sessionStorage.getItem(JOIN_KEY) === sessionId) return
+  if (safeSessionGet(JOIN_KEY) === sessionId) return
   await addDoc(collection(db, "chatMessages"), {
     nombre: nombre.trim().slice(0, 32),
     texto: `${nombre.trim()} entró al chat`,
@@ -128,7 +134,7 @@ export async function anunciarEntradaChat(nombre: string, sessionId: string) {
     sessionId,
     createdAt: serverTimestamp(),
   })
-  sessionStorage.setItem(JOIN_KEY, sessionId)
+  safeSessionSet(JOIN_KEY, sessionId)
 }
 
 export function subscribeChatMessages(
@@ -227,14 +233,22 @@ export function iniciarPresenciaChat(nombre: string): () => void {
 
   const onPageHide = () => salir()
 
-  document.addEventListener("visibilitychange", onVisible)
-  window.addEventListener("pagehide", onPageHide)
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisible)
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("pagehide", onPageHide)
+  }
 
   return () => {
     clearInterval(heartbeat)
     clearInterval(limpieza)
-    document.removeEventListener("visibilitychange", onVisible)
-    window.removeEventListener("pagehide", onPageHide)
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+    if (typeof window !== "undefined") {
+      window.removeEventListener("pagehide", onPageHide)
+    }
     salir()
   }
 }

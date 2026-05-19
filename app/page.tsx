@@ -84,8 +84,12 @@ export default function Home() {
   }
 
   function handleCambiarNombreChat() {
-    localStorage.removeItem("chatNombre")
-    sessionStorage.removeItem("chatJoinAnnounced")
+    try {
+      localStorage.removeItem("chatNombre")
+      sessionStorage.removeItem("chatJoinAnnounced")
+    } catch {
+      // ignorar si el almacenamiento no está disponible
+    }
     setChatNombre(null)
   }
 

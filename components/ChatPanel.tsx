@@ -29,7 +29,11 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
   const [mostrarEmojis, setMostrarEmojis] = useState(false)
   const listaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const sessionId = getChatSessionId()
+  const [sessionId, setSessionId] = useState("")
+
+  useEffect(() => {
+    setSessionId(getChatSessionId())
+  }, [])
 
   function insertarEmoji(emoji: string) {
     setTexto((prev) => prev + emoji)
@@ -37,6 +41,8 @@ export default function ChatPanel({ nombre, onCambiarNombre, className = "" }: C
   }
 
   useEffect(() => {
+    if (!sessionId) return
+
     setListo(true)
 
     const unsubMsg = subscribeChatMessages(

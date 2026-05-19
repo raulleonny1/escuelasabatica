@@ -1,6 +1,5 @@
 "use client"
 
-import Image from "next/image"
 import ChatEnLineaIndicador from "@/components/ChatEnLineaIndicador"
 
 export default function AppHeader() {
@@ -24,13 +23,11 @@ export default function AppHeader() {
         <ChatEnLineaIndicador placement="desktop" />
 
         <div className="relative ml-auto h-12 w-24 shrink-0 sm:h-14 sm:w-28 md:h-20 md:w-44 lg:h-24 lg:w-52">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/segundo_trimestre.png"
             alt="Segundo trimestre 2026"
-            fill
-            className="object-contain object-right"
-            sizes="(max-width: 640px) 96px, (max-width: 768px) 144px, 208px"
-            priority
+            className="h-full w-full object-contain object-right"
           />
         </div>
       </div>
