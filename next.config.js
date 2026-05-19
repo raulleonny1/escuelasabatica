@@ -7,7 +7,8 @@ const withPWA = require("next-pwa")({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  // Evita doble montaje del visor PDF en desarrollo (rompe pdf.js)
+  reactStrictMode: false,
   turbopack: {}, // Configuración mínima para habilitar Turbopack y evitar el error
 };
 

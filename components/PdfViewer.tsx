@@ -29,17 +29,10 @@ function detectarModoTactil(): boolean {
   )
 }
 
-function PdfDocument({
-  url,
-  touchMode,
-  irAlDiaLectura,
-  semana,
-}: {
-  url: string
-  touchMode: boolean
-  irAlDiaLectura?: boolean
-  semana?: number
-}) {
+export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProps) {
+  const [touchMode] = useState(detectarModoTactil)
+  const [montado, setMontado] = useState(false)
+
   const scrollModePluginInstance = useMemo(() => scrollModePlugin(), [])
   const pageNavigationPluginInstance = useMemo(() => pageNavigationPlugin(), [])
   const defaultLayoutPluginInstance = useMemo(
@@ -49,6 +42,10 @@ function PdfDocument({
       }),
     []
   )
+
+  useEffect(() => {
+    setMontado(true)
+  }, [])
 
   const onDocumentLoad = useCallback(
     async (e: DocumentLoadEvent) => {
@@ -71,41 +68,7 @@ function PdfDocument({
     [touchMode, irAlDiaLectura, semana, scrollModePluginInstance, pageNavigationPluginInstance]
   )
 
-  return (
-    <Viewer
-      fileUrl={url}
-      plugins={[defaultLayoutPluginInstance, scrollModePluginInstance, pageNavigationPluginInstance]}
-      defaultScale={touchMode ? SpecialZoomLevel.PageWidth : SpecialZoomLevel.PageFit}
-      onDocumentLoad={onDocumentLoad}
-      renderLoader={(percent) => (
-        <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-slate-500">
-          Cargando PDF… {Math.round(percent)}%
-        </div>
-      )}
-      renderError={(loadError) => (
-        <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-4 text-center">
-          <p className="font-semibold text-red-700">No se pudo abrir el PDF</p>
-          <p className="text-sm text-slate-600">
-            {loadError.message || "Archivo no encontrado"}
-          </p>
-          <p className="text-xs text-slate-400 break-all">{url}</p>
-        </div>
-      )}
-    />
-  )
-}
-
-export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProps) {
-  const [touchMode] = useState(detectarModoTactil)
-  const [viewerListo, setViewerListo] = useState(false)
-
-  useEffect(() => {
-    setViewerListo(true)
-  }, [])
-
-  const documentKey = `${url}-${touchMode ? "touch" : "desktop"}`
-
-  if (!viewerListo) {
+  if (!montado) {
     return (
       <div className="pdf-viewer-shell flex h-full min-h-[200px] items-center justify-center lg:min-h-[480px]">
         <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -116,12 +79,30 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
   return (
     <div className="pdf-viewer-shell h-full w-full min-h-[200px] lg:min-h-[480px]">
       <Worker workerUrl="/pdf.worker.min.js">
-        <PdfDocument
-          key={documentKey}
-          url={url}
-          touchMode={touchMode}
-          irAlDiaLectura={irAlDiaLectura}
-          semana={semana}
+        <Viewer
+          key={url}
+          fileUrl={url}
+          plugins={[
+            defaultLayoutPluginInstance,
+            scrollModePluginInstance,
+            pageNavigationPluginInstance,
+          ]}
+          defaultScale={touchMode ? SpecialZoomLevel.PageWidth : SpecialZoomLevel.PageFit}
+          onDocumentLoad={onDocumentLoad}
+          renderLoader={(percent) => (
+            <div className="flex h-full min-h-[200px] items-center justify-center text-sm text-slate-500">
+              Cargando PDF… {Math.round(percent)}%
+            </div>
+          )}
+          renderError={(loadError) => (
+            <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-4 text-center">
+              <p className="font-semibold text-red-700">No se pudo abrir el PDF</p>
+              <p className="text-sm text-slate-600">
+                {loadError.message || "Archivo no encontrado"}
+              </p>
+              <p className="text-xs text-slate-400 break-all">{url}</p>
+            </div>
+          )}
         />
       </Worker>
     </div>

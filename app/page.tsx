@@ -28,6 +28,7 @@ import {
   iniciarPresenciaChat,
   leerNombreChat,
 } from "@/lib/chat"
+import { safeLocalRemove, safeSessionRemove } from "@/lib/storage"
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
 
@@ -84,12 +85,8 @@ export default function Home() {
   }
 
   function handleCambiarNombreChat() {
-    try {
-      localStorage.removeItem("chatNombre")
-      sessionStorage.removeItem("chatJoinAnnounced")
-    } catch {
-      // ignorar si el almacenamiento no está disponible
-    }
+    safeLocalRemove("chatNombre")
+    safeSessionRemove("chatJoinAnnounced")
     setChatNombre(null)
   }
 
@@ -191,7 +188,7 @@ export default function Home() {
   return (
     <div className="flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
       <div
-        className={`flex min-h-0 min-w-0 flex-col bg-slate-50 lg:flex-7 lg:border-r lg:border-border ${
+        className={`layout-pdf-panel flex min-h-0 min-w-0 flex-col bg-slate-50 lg:border-r lg:border-border ${
           mobileTab === "pdf" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >
@@ -230,7 +227,7 @@ export default function Home() {
       </div>
 
       <aside
-        className={`flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto custom-scroll bg-surface p-3 md:p-4 lg:flex-2 ${
+        className={`layout-sidebar-panel flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto custom-scroll bg-surface p-3 md:p-4 ${
           mobileTab === "estudio" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >

@@ -55,15 +55,35 @@ body {
   background: #94a3b8;
 }
 
+/* Reparto 70% / 30% en escritorio (flex-7 no existe en Tailwind) */
+@media (min-width: 1024px) {
+  .layout-pdf-panel {
+    flex: 7 1 0%;
+    min-width: 0;
+  }
+
+  .layout-sidebar-panel {
+    flex: 2 1 0%;
+    min-width: 0;
+  }
+}
+
 /* Visor PDF: altura completa del panel */
 .pdf-viewer-shell {
   height: 100%;
-  min-height: 480px;
+  min-height: 0;
 }
 
 .pdf-viewer-shell .rpv-default-layout__container {
   height: 100%;
-  min-height: 480px;
+  min-height: 0;
+}
+
+@media (min-width: 1024px) {
+  .pdf-viewer-shell,
+  .pdf-viewer-shell .rpv-default-layout__container {
+    min-height: 320px;
+  }
 }
 
 .pdf-viewer-shell .rpv-default-layout__main {
