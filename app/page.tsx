@@ -14,6 +14,16 @@ import {
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
 
+const TIPOS = [
+  { id: "visual", label: "Visual" },
+  { id: "resumen", label: "Resumen" },
+  { id: "preguntas", label: "Preguntas" },
+  { id: "leccion", label: "Lección" },
+] as const
+
+const inputClass =
+  "w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 transition"
+
 export default function Home() {
   const [showModal, setShowModal] = useState(false)
   const [editFecha, setEditFecha] = useState<string | null>(null)
@@ -121,136 +131,174 @@ export default function Home() {
   }
 
   return (
-    <div className="flex flex-row h-screen w-full">
-      <div className="flex-7 border-r flex flex-col">
+    <div className="flex h-full min-h-0 w-full flex-row">
+      {/* Panel PDF */}
+      <div className="flex min-w-0 flex-7 flex-col border-r border-border bg-slate-50">
         {BibliaPasaje && (
-          <div className="border-b p-4 bg-yellow-50">
-            <div className="font-bold mb-1">Pasaje bíblico seleccionado:</div>
-            <div className="text-base text-gray-800 whitespace-pre-line">{BibliaPasaje}</div>
+          <div className="border-b border-accent/30 bg-accent-soft px-5 py-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary/70 mb-1">
+              Pasaje seleccionado
+            </p>
+            <p className="text-sm leading-relaxed text-slate-800 whitespace-pre-line">{BibliaPasaje}</p>
+            <button
+              type="button"
+              onClick={() => setBibliaPasaje("")}
+              className="mt-2 text-xs text-primary hover:underline"
+            >
+              Cerrar
+            </button>
           </div>
         )}
-        <div className="flex-1 h-0 overflow-y-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-          <PdfViewer url={`/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`} />
+        <div className="flex-1 min-h-0 overflow-hidden pdf-viewer-wrap">
+          <PdfViewer
+            key={`${semana}-${tipo}`}
+            url={`/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`}
+          />
         </div>
       </div>
 
-      <div className="flex-2 p-3 flex flex-col gap-2">
-        <select
-          value={semana}
-          onChange={(e) => setSemana(Number(e.target.value))}
-          className="border p-2 rounded mb-2 w-full"
-        >
-          {Array.from({ length: 13 }, (_, i) => (
-            <option key={i} value={i + 1}>Semana {i + 1}</option>
-          ))}
-        </select>
+      {/* Panel lateral */}
+      <aside className="flex min-w-0 flex-2 flex-col gap-3 overflow-y-auto custom-scroll bg-surface p-3 md:p-4">
+        {/* Lección */}
+        <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Lección</p>
+          <label className="mb-1 block text-xs text-slate-500">Semana</label>
+          <select
+            value={semana}
+            onChange={(e) => setSemana(Number(e.target.value))}
+            className={inputClass}
+          >
+            {Array.from({ length: 13 }, (_, i) => (
+              <option key={i} value={i + 1}>
+                Semana {i + 1}
+              </option>
+            ))}
+          </select>
 
-        <div className="flex gap-2 mb-2">
-          <button onClick={() => setTipo("visual")} className="border px-3 py-1 rounded flex-1">Visual</button>
-          <button onClick={() => setTipo("resumen")} className="border px-3 py-1 rounded flex-1">Resumen</button>
-          <button onClick={() => setTipo("preguntas")} className="border px-3 py-1 rounded flex-1">Preguntas</button>
-          <button onClick={() => setTipo("leccion")} className="border px-3 py-1 rounded flex-1">Lección</button>
-        </div>
+          <p className="mb-2 mt-3 text-xs text-slate-500">Tipo de material</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {TIPOS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTipo(t.id)}
+                className={`rounded-lg px-2 py-2 text-xs font-medium transition-all ${
+                  tipo === t.id
+                    ? "bg-primary text-white shadow-md shadow-primary/25"
+                    : "border border-border bg-white text-slate-600 hover:border-primary/30 hover:bg-white"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
-        <div className="h-75 w-full overflow-y-auto border mb-2 bg-white p-2">
-          <div className="flex justify-between items-center mb-2">
-            <span className="font-bold">Comentarios guardados</span>
-            <button className="border rounded px-2 py-1 text-xs bg-blue-500 text-white" onClick={() => setShowModal(true)}>
+        {/* Comentarios */}
+        <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">Mis notas</p>
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="rounded-lg bg-primary px-2.5 py-1 text-xs font-medium text-white shadow-sm hover:bg-primary-light transition"
+            >
               Ver todos
             </button>
           </div>
 
           {syncError && (
-            <div className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded p-2 mb-2">
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
               {syncError}
             </div>
           )}
 
-          {cargandoComentarios && (
-            <div className="text-gray-500 text-sm">Cargando comentarios...</div>
-          )}
-
-          {!cargandoComentarios && Object.keys(comentariosPorFecha).length === 0 && (
-            <div className="text-gray-500">No hay comentarios guardados.</div>
-          )}
-
-          {Object.entries(comentariosPorFecha)
-            .filter(([fecha]) => !selectedDate || fecha === selectedDate)
-            .map(([fecha, texto]) => (
-              <div key={fecha} className="mb-4 border-b pb-2">
-                <div>
-                  <div className="text-xs text-gray-500 mb-1">{formatDateDMY(fecha)}</div>
-                  <div className="text-base text-gray-800 whitespace-pre-line">{texto}</div>
-                </div>
-                <div className="flex flex-col gap-1 mt-2">
-                  <button
-                    className="text-xs px-2 py-1 border rounded bg-yellow-200 hover:bg-yellow-300"
-                    onClick={() => { setEditFecha(fecha); setEditTexto(texto) }}
-                    disabled={guardando}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    className="text-xs px-2 py-1 border rounded bg-red-200 hover:bg-red-300"
-                    onClick={() => handleEliminar(fecha)}
-                    disabled={guardando}
-                  >
-                    Eliminar
-                  </button>
-                </div>
-                {editFecha === fecha && (
-                  <div className="mt-2">
-                    <textarea
-                      value={editTexto}
-                      onChange={(e) => setEditTexto(e.target.value)}
-                      className="w-full h-20 p-2 border rounded resize-none mb-2"
-                    />
-                    <button
-                      className="border rounded p-2 bg-blue-600 text-white mr-2 disabled:opacity-50"
-                      disabled={guardando}
-                      onClick={async () => {
-                        await handleGuardar(fecha, editTexto)
-                        setEditFecha(null)
-                      }}
-                    >
-                      Guardar
-                    </button>
-                    <button className="border rounded p-2 bg-gray-300 text-black" onClick={() => setEditFecha(null)}>
-                      Cancelar
-                    </button>
-                  </div>
-                )}
+          <div className="h-75 custom-scroll overflow-y-auto">
+            {cargandoComentarios && (
+              <div className="flex items-center gap-2 py-4 text-sm text-muted">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                Cargando...
               </div>
-            ))}
-        </div>
+            )}
 
-        {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-            <div className="bg-white rounded shadow-lg p-6 w-100 max-h-[80vh] overflow-y-auto relative">
-              <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-800" onClick={() => setShowModal(false)}>
-                ×
-              </button>
-              <div className="font-bold mb-4">Todos los comentarios</div>
-              {Object.keys(comentariosPorFecha).length === 0 && (
-                <div className="text-gray-500">No hay comentarios guardados.</div>
-              )}
-              {Object.entries(comentariosPorFecha)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([fecha, texto]) => (
-                  <div key={fecha} className="mb-4 border-b pb-2">
-                    <div className="text-xs text-gray-500 mb-1">{formatDateDMY(fecha)}</div>
-                    <div className="text-base text-gray-800 whitespace-pre-line">{texto}</div>
+            {!cargandoComentarios && Object.keys(comentariosPorFecha).length === 0 && (
+              <p className="py-4 text-center text-sm text-muted">Aún no hay notas guardadas.</p>
+            )}
+
+            {Object.entries(comentariosPorFecha)
+              .filter(([fecha]) => !selectedDate || fecha === selectedDate)
+              .map(([fecha, texto]) => (
+                <article
+                  key={fecha}
+                  className="mb-3 rounded-lg border border-border bg-surface/80 p-2.5 last:mb-0"
+                >
+                  <time className="text-xs font-medium text-primary">{formatDateDMY(fecha)}</time>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-700 whitespace-pre-line line-clamp-4">
+                    {texto}
+                  </p>
+                  <div className="mt-2 flex gap-1.5">
+                    <button
+                      type="button"
+                      className="flex-1 rounded-md border border-border bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-accent-soft transition disabled:opacity-50"
+                      onClick={() => {
+                        setEditFecha(fecha)
+                        setEditTexto(texto)
+                      }}
+                      disabled={guardando}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="flex-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition disabled:opacity-50"
+                      onClick={() => handleEliminar(fecha)}
+                      disabled={guardando}
+                    >
+                      Eliminar
+                    </button>
                   </div>
-                ))}
-            </div>
+                  {editFecha === fecha && (
+                    <div className="mt-2 space-y-2 border-t border-border pt-2">
+                      <textarea
+                        value={editTexto}
+                        onChange={(e) => setEditTexto(e.target.value)}
+                        className={`${inputClass} min-h-20 resize-none`}
+                      />
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          className="flex-1 rounded-lg bg-primary py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                          disabled={guardando}
+                          onClick={async () => {
+                            await handleGuardar(fecha, editTexto)
+                            setEditFecha(null)
+                          }}
+                        >
+                          Guardar
+                        </button>
+                        <button
+                          type="button"
+                          className="flex-1 rounded-lg border border-border py-1.5 text-xs font-medium text-slate-600"
+                          onClick={() => setEditFecha(null)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              ))}
           </div>
-        )}
+        </section>
 
-        <div className="h-50 overflow-y-auto border mb-2" style={{ WebkitOverflowScrolling: "touch" }}>
+        {/* Biblia */}
+        <section className="h-50 custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm">
           <Biblia agregarVersiculo={agregarVersiculo} />
-        </div>
+        </section>
 
-        <div className="w-full mt-2">
+        {/* Nuevo comentario */}
+        <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Nueva nota</p>
           <input
             type="date"
             value={selectedDate}
@@ -260,30 +308,72 @@ export default function Home() {
               const existente = comentariosPorFecha[e.target.value]
               setComentario(existente ?? "")
             }}
-            className="border rounded p-2 w-full mb-2"
+            className={inputClass}
           />
           {showInput && selectedDate && (
-            <div className="flex flex-col gap-2">
+            <div className="mt-2 space-y-2">
               <textarea
                 value={comentario}
                 onChange={(e) => setComentario(e.target.value)}
-                placeholder={`Comentario para ${selectedDate}`}
-                className="w-full h-25 p-2 border rounded resize-none"
+                placeholder="Escribe tu reflexión del día..."
+                className={`${inputClass} min-h-25 resize-none`}
               />
               <button
-                className="border rounded p-2 bg-blue-600 text-white disabled:opacity-50"
+                type="button"
+                className="w-full rounded-lg bg-primary py-2.5 text-sm font-medium text-white shadow-md shadow-primary/20 hover:bg-primary-light transition disabled:opacity-50"
                 disabled={guardando || !comentario.trim()}
                 onClick={async () => {
                   await handleGuardar(selectedDate, comentario)
                   alert("Comentario guardado")
                 }}
               >
-                {guardando ? "Guardando..." : "Guardar comentario"}
+                {guardando ? "Guardando..." : "Guardar nota"}
               </button>
             </div>
           )}
+        </section>
+      </aside>
+
+      {/* Modal */}
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="relative w-full max-w-lg max-h-[85vh] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-border bg-primary px-5 py-4 text-white">
+              <h2 className="font-display text-lg font-semibold">Todas mis notas</h2>
+              <p className="text-xs text-blue-100/80 mt-0.5">
+                {Object.keys(comentariosPorFecha).length} nota(s) guardada(s)
+              </p>
+            </div>
+            <button
+              type="button"
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition"
+              onClick={() => setShowModal(false)}
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+            <div className="custom-scroll max-h-[60vh] overflow-y-auto p-5">
+              {Object.keys(comentariosPorFecha).length === 0 && (
+                <p className="text-center text-sm text-muted">No hay notas guardadas.</p>
+              )}
+              {Object.entries(comentariosPorFecha)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([fecha, texto]) => (
+                  <article key={fecha} className="mb-4 border-b border-border pb-4 last:mb-0 last:border-0">
+                    <time className="text-xs font-semibold text-primary">{formatDateDMY(fecha)}</time>
+                    <p className="mt-1 text-sm leading-relaxed text-slate-700 whitespace-pre-line">{texto}</p>
+                  </article>
+                ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
