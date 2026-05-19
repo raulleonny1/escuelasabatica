@@ -3,7 +3,9 @@
 export type PlataformaPwa = "ios" | "android" | "desktop"
 
 export const PWA_MOSTRAR_EVENT = "pwa-mostrar-instalacion"
-export const DISMISS_KEY = "pwa-install-dismissed"
+
+/** Clave antigua: ya no se usa para ocultar el banner de forma permanente */
+const LEGACY_DISMISS_KEY = "pwa-install-dismissed"
 
 /** iPhone, iPad (incl. iPadOS que reporta "Macintosh") */
 export function esAppleDispositivo(): boolean {
@@ -45,12 +47,13 @@ export function yaInstaladaPwa(): boolean {
   return Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
 }
 
-export function fueInstalacionRechazada(): boolean {
-  if (typeof window === "undefined") return false
+/** Quita el “no volver a mostrar” de versiones anteriores */
+export function limpiarRechazoInstalacionAntiguo(): void {
+  if (typeof window === "undefined") return
   try {
-    return window.localStorage.getItem(DISMISS_KEY) === "1"
+    window.localStorage.removeItem(LEGACY_DISMISS_KEY)
   } catch {
-    return false
+    // ignorar
   }
 }
 
@@ -66,4 +69,13 @@ export function etiquetaDispositivo(): string {
   if (esAppleDispositivo()) return "iPhone"
   if (esAndroid()) return "Android"
   return "dispositivo"
+}
+
+export function modoBannerParaPlataforma(
+  tienePromptNativo: boolean
+): "nativo" | "ios" | "android-manual" | "desktop-manual" {
+  if (tienePromptNativo) return "nativo"
+  if (esAppleDispositivo()) return "ios"
+  if (esAndroid()) return "android-manual"
+  return "desktop-manual"
 }

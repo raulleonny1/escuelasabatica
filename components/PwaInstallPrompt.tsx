@@ -2,14 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
-  DISMISS_KEY,
   PWA_MOSTRAR_EVENT,
-  esAppleDispositivo,
-  esAndroid,
   esTablet,
   etiquetaDispositivo,
-  fueInstalacionRechazada,
   getPlataformaPwa,
+  limpiarRechazoInstalacionAntiguo,
+  modoBannerParaPlataforma,
   yaInstaladaPwa,
 } from "@/lib/pwa"
 
@@ -26,7 +24,15 @@ export default function PwaInstallPrompt() {
   const [modo, setModo] = useState<ModoBanner>("desktop-manual")
   const [instalando, setInstalando] = useState(false)
   const bipRecibido = useRef(false)
+  const timerRef = useRef<number | null>(null)
   const [montado, setMontado] = useState(false)
+
+  const limpiarTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
 
   const mostrarBanner = useCallback((nuevoModo: ModoBanner) => {
     if (yaInstaladaPwa()) return
@@ -34,18 +40,38 @@ export default function PwaInstallPrompt() {
     setVisible(true)
   }, [])
 
-  const cerrar = useCallback((recordar = true) => {
-    setVisible(false)
-    if (recordar) {
-      try {
-        window.localStorage.setItem(DISMISS_KEY, "1")
-      } catch {
-        // ignorar
-      }
+  const programarBanner = useCallback(() => {
+    if (yaInstaladaPwa()) return
+
+    limpiarTimer()
+
+    if (bipRecibido.current && deferredPrompt) {
+      mostrarBanner("nativo")
+      return
     }
+
+    const plataforma = getPlataformaPwa()
+    const delay = plataforma === "ios" ? 800 : plataforma === "android" ? 2000 : 3500
+
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null
+      if (yaInstaladaPwa()) return
+      if (bipRecibido.current && deferredPrompt) {
+        mostrarBanner("nativo")
+        return
+      }
+      if (plataforma === "ios") mostrarBanner("ios")
+      else if (plataforma === "android") mostrarBanner("android-manual")
+      else mostrarBanner("desktop-manual")
+    }, delay)
+  }, [deferredPrompt, limpiarTimer, mostrarBanner])
+
+  const cerrarTemporal = useCallback(() => {
+    setVisible(false)
   }, [])
 
   useEffect(() => {
+    limpiarRechazoInstalacionAntiguo()
     setMontado(true)
   }, [])
 
@@ -54,10 +80,7 @@ export default function PwaInstallPrompt() {
 
     const onMostrar = () => {
       if (yaInstaladaPwa()) return
-      if (deferredPrompt) mostrarBanner("nativo")
-      else if (esAppleDispositivo()) mostrarBanner("ios")
-      else if (esAndroid()) mostrarBanner("android-manual")
-      else mostrarBanner("desktop-manual")
+      mostrarBanner(modoBannerParaPlataforma(Boolean(deferredPrompt)))
     }
 
     window.addEventListener(PWA_MOSTRAR_EVENT, onMostrar)
@@ -65,41 +88,32 @@ export default function PwaInstallPrompt() {
   }, [montado, deferredPrompt, mostrarBanner])
 
   useEffect(() => {
-    if (!montado || yaInstaladaPwa() || fueInstalacionRechazada()) return
+    if (!montado || yaInstaladaPwa()) return
 
     const onBip = (e: Event) => {
       e.preventDefault()
       bipRecibido.current = true
       setDeferredPrompt(e as BeforeInstallPromptEvent)
+      limpiarTimer()
       mostrarBanner("nativo")
     }
 
     window.addEventListener("beforeinstallprompt", onBip)
+    programarBanner()
 
-    const plataforma = getPlataformaPwa()
+    const onPageShow = () => {
+      if (yaInstaladaPwa()) return
+      programarBanner()
+    }
 
-    const timerApple = window.setTimeout(() => {
-      if (bipRecibido.current || yaInstaladaPwa() || fueInstalacionRechazada()) return
-      if (plataforma === "ios") mostrarBanner("ios")
-    }, 1200)
-
-    const timerAndroid = window.setTimeout(() => {
-      if (bipRecibido.current || yaInstaladaPwa() || fueInstalacionRechazada()) return
-      if (plataforma === "android") mostrarBanner("android-manual")
-    }, 2500)
-
-    const timerDesktop = window.setTimeout(() => {
-      if (bipRecibido.current || yaInstaladaPwa() || fueInstalacionRechazada()) return
-      if (plataforma === "desktop") mostrarBanner("desktop-manual")
-    }, 4000)
+    window.addEventListener("pageshow", onPageShow)
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBip)
-      window.clearTimeout(timerApple)
-      window.clearTimeout(timerAndroid)
-      window.clearTimeout(timerDesktop)
+      window.removeEventListener("pageshow", onPageShow)
+      limpiarTimer()
     }
-  }, [montado, mostrarBanner])
+  }, [montado, programarBanner, mostrarBanner, limpiarTimer])
 
   async function instalar() {
     if (!deferredPrompt) return
@@ -107,12 +121,14 @@ export default function PwaInstallPrompt() {
     try {
       await deferredPrompt.prompt()
       const { outcome } = await deferredPrompt.userChoice
-      cerrar(outcome === "accepted")
+      setDeferredPrompt(null)
+      if (outcome === "accepted" || yaInstaladaPwa()) {
+        setVisible(false)
+      }
     } catch {
-      cerrar(false)
+      cerrarTemporal()
     } finally {
       setInstalando(false)
-      setDeferredPrompt(null)
     }
   }
 
@@ -136,15 +152,6 @@ export default function PwaInstallPrompt() {
       )
     }
     if (modo === "android-manual") {
-      if (esTab) {
-        return (
-          <>
-            En <strong>Chrome</strong>: menú <strong>⋮</strong> →{" "}
-            <strong>Instalar aplicación</strong> o <strong>Añadir a pantalla de inicio</strong>.
-            También puede aparecer un aviso en la barra de direcciones.
-          </>
-        )
-      }
       return (
         <>
           En <strong>Chrome</strong>: menú <strong>⋮</strong> →{" "}
@@ -163,7 +170,7 @@ export default function PwaInstallPrompt() {
     return <>Accede más rápido desde tu pantalla de inicio, como una aplicación.</>
   }
 
-  if (!montado || !visible) return null
+  if (!montado || !visible || yaInstaladaPwa()) return null
 
   const puedeInstalarNativo = modo === "nativo" && deferredPrompt
 
@@ -175,8 +182,13 @@ export default function PwaInstallPrompt() {
     >
       <div className="rounded-xl border border-primary/20 bg-card p-4 shadow-2xl shadow-slate-900/15">
         <div className="flex gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-xl text-white">
-            📖
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#f4f1eb] p-0.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logoes.png"
+              alt=""
+              className="h-full w-full object-contain"
+            />
           </div>
           <div className="min-w-0 flex-1">
             <p id="pwa-install-title" className="font-display text-base font-semibold text-primary">
@@ -203,7 +215,7 @@ export default function PwaInstallPrompt() {
           {!puedeInstalarNativo && (
             <button
               type="button"
-              onClick={() => cerrar(true)}
+              onClick={cerrarTemporal}
               className="min-h-11 flex-1 rounded-lg bg-primary px-4 text-sm font-medium text-white active:opacity-90"
             >
               Entendido
@@ -211,7 +223,7 @@ export default function PwaInstallPrompt() {
           )}
           <button
             type="button"
-            onClick={() => cerrar(true)}
+            onClick={cerrarTemporal}
             className="min-h-11 rounded-lg border border-border px-4 text-sm font-medium text-slate-600 active:bg-slate-50"
           >
             Ahora no
