@@ -1,10 +1,10 @@
 "use client"
 
 const TIPOS = [
+  { id: "leccion", label: "Lección" },
   { id: "visual", label: "Visual" },
   { id: "resumen", label: "Resumen" },
   { id: "preguntas", label: "Preguntas" },
-  { id: "leccion", label: "Lección" },
 ] as const
 
 const inputClass =
