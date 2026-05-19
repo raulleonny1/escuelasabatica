@@ -49,10 +49,11 @@ export async function migrarComentariosLocales(data: Record<string, string>) {
   )
 }
 
-export async function guardarComentario(fecha: string, texto: string) {
+export async function guardarComentario(fecha: string, texto: string, semana?: number) {
   await setDoc(doc(db, "comentarios", fecha), {
     fecha,
     texto,
+    ...(semana != null ? { semana } : {}),
     updatedAt: serverTimestamp(),
   })
 }

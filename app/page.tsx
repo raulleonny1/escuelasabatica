@@ -13,11 +13,10 @@ import {
 } from "@/lib/comentarios"
 
 import LeccionControls from "@/components/LeccionControls"
+import NotasPanel from "@/components/NotasPanel"
+import { getFechasSemana } from "@/lib/semana"
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
-
-const inputClass =
-  "w-full rounded-lg border border-border bg-white px-3 py-3 text-base text-slate-700 shadow-sm focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 transition md:py-2 md:text-sm"
 
 type MobileTab = "pdf" | "estudio"
 
@@ -31,7 +30,6 @@ export default function Home() {
   const [comentariosPorFecha, setComentariosPorFecha] = useState<Record<string, string>>({})
   const [comentario, setComentario] = useState("")
   const [selectedDate, setSelectedDate] = useState("")
-  const [showInput, setShowInput] = useState(false)
   const [cargandoComentarios, setCargandoComentarios] = useState(true)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -83,10 +81,20 @@ export default function Home() {
     return () => unsubscribe()
   }, [])
 
+  useEffect(() => {
+    const dias = getFechasSemana(semana)
+    if (!dias.length) return
+    const enRango = dias.some((d) => d.fecha === selectedDate)
+    if (!enRango) {
+      setSelectedDate(dias[0].fecha)
+      setComentario(comentariosPorFecha[dias[0].fecha] ?? "")
+    }
+  }, [semana, selectedDate, comentariosPorFecha])
+
   async function handleGuardar(fecha: string, texto: string) {
     setGuardando(true)
     try {
-      await guardarComentario(fecha, texto)
+      await guardarComentario(fecha, texto, semana)
       setComentariosPorFecha((prev) => {
         const nuevo = { ...prev, [fecha]: texto }
         guardarComentariosLocal(nuevo)
@@ -170,143 +178,27 @@ export default function Home() {
           <LeccionControls semana={semana} setSemana={setSemana} tipo={tipo} setTipo={setTipo} />
         </div>
 
-        {/* Comentarios */}
-        <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted">Mis notas</p>
-            <button
-              type="button"
-              onClick={() => setShowModal(true)}
-              className="min-h-10 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white shadow-sm active:opacity-90"
-            >
-              Ver todos
-            </button>
-          </div>
+        <NotasPanel
+          semana={semana}
+          comentariosPorFecha={comentariosPorFecha}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          comentario={comentario}
+          setComentario={setComentario}
+          cargandoComentarios={cargandoComentarios}
+          syncError={syncError}
+          guardando={guardando}
+          editFecha={editFecha}
+          editTexto={editTexto}
+          setEditFecha={setEditFecha}
+          setEditTexto={setEditTexto}
+          onGuardar={handleGuardar}
+          onEliminar={handleEliminar}
+          onVerTodos={() => setShowModal(true)}
+        />
 
-          {syncError && (
-            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
-              {syncError}
-            </div>
-          )}
-
-          <div className="max-h-48 custom-scroll overflow-y-auto lg:max-h-none lg:h-75">
-            {cargandoComentarios && (
-              <div className="flex items-center gap-2 py-4 text-sm text-muted">
-                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                Cargando...
-              </div>
-            )}
-
-            {!cargandoComentarios && Object.keys(comentariosPorFecha).length === 0 && (
-              <p className="py-4 text-center text-sm text-muted">Aún no hay notas guardadas.</p>
-            )}
-
-            {Object.entries(comentariosPorFecha)
-              .filter(([fecha]) => !selectedDate || fecha === selectedDate)
-              .map(([fecha, texto]) => (
-                <article
-                  key={fecha}
-                  className="mb-3 rounded-lg border border-border bg-surface/80 p-2.5 last:mb-0"
-                >
-                  <time className="text-xs font-medium text-primary">{formatDateDMY(fecha)}</time>
-                  <p className="mt-1 text-sm leading-relaxed text-slate-700 whitespace-pre-line line-clamp-4">
-                    {texto}
-                  </p>
-                  <div className="mt-2 flex gap-1.5">
-                    <button
-                      type="button"
-                      className="flex-1 rounded-md border border-border bg-white px-2 py-1 text-xs font-medium text-slate-600 hover:bg-accent-soft transition disabled:opacity-50"
-                      onClick={() => {
-                        setEditFecha(fecha)
-                        setEditTexto(texto)
-                      }}
-                      disabled={guardando}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="flex-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition disabled:opacity-50"
-                      onClick={() => handleEliminar(fecha)}
-                      disabled={guardando}
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                  {editFecha === fecha && (
-                    <div className="mt-2 space-y-2 border-t border-border pt-2">
-                      <textarea
-                        value={editTexto}
-                        onChange={(e) => setEditTexto(e.target.value)}
-                        className={`${inputClass} min-h-20 resize-none`}
-                      />
-                      <div className="flex gap-1.5">
-                        <button
-                          type="button"
-                          className="flex-1 rounded-lg bg-primary py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                          disabled={guardando}
-                          onClick={async () => {
-                            await handleGuardar(fecha, editTexto)
-                            setEditFecha(null)
-                          }}
-                        >
-                          Guardar
-                        </button>
-                        <button
-                          type="button"
-                          className="flex-1 rounded-lg border border-border py-1.5 text-xs font-medium text-slate-600"
-                          onClick={() => setEditFecha(null)}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </article>
-              ))}
-          </div>
-        </section>
-
-        {/* Biblia */}
         <section className="min-h-40 max-h-56 custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm lg:max-h-none lg:h-50">
           <Biblia agregarVersiculo={agregarVersiculo} />
-        </section>
-
-        {/* Nuevo comentario */}
-        <section className="rounded-xl border border-border bg-card p-3 shadow-sm">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Nueva nota</p>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => {
-              setSelectedDate(e.target.value)
-              setShowInput(true)
-              const existente = comentariosPorFecha[e.target.value]
-              setComentario(existente ?? "")
-            }}
-            className={inputClass}
-          />
-          {showInput && selectedDate && (
-            <div className="mt-2 space-y-2">
-              <textarea
-                value={comentario}
-                onChange={(e) => setComentario(e.target.value)}
-                placeholder="Escribe tu reflexión del día..."
-                className={`${inputClass} min-h-25 resize-none`}
-              />
-              <button
-                type="button"
-                className="min-h-12 w-full rounded-lg bg-primary py-3 text-base font-medium text-white shadow-md shadow-primary/20 active:opacity-90 disabled:opacity-50"
-                disabled={guardando || !comentario.trim()}
-                onClick={async () => {
-                  await handleGuardar(selectedDate, comentario)
-                  alert("Comentario guardado")
-                }}
-              >
-                {guardando ? "Guardando..." : "Guardar nota"}
-              </button>
-            </div>
-          )}
         </section>
       </aside>
 
