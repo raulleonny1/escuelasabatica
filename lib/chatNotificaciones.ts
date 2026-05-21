@@ -35,6 +35,7 @@ export function mensajeEsParaMi(texto: string, miNombre: string): boolean {
 let audioCtx: AudioContext | null = null
 let ultimoSonidoMs = 0
 let ultimoSonidoUnionMs = 0
+let ultimoSonidoEntradaMs = 0
 let audioListo = false
 
 /** El navegador exige un clic antes de reproducir sonido */
@@ -85,6 +86,47 @@ export function reproducirSonidoMensajeDirecto() {
 }
 
 /** Dos tonos suaves: alguien pidió unirse a la clase (maestro) */
+/** Maestro: alguien entró a la clase (presencia en la app) */
+export function reproducirSonidoEntradaAlumno() {
+  if (typeof window === "undefined") return
+  const ahora = Date.now()
+  if (ahora - ultimoSonidoEntradaMs < 1200) return
+  ultimoSonidoEntradaMs = ahora
+
+  prepararSonidoChat()
+  if (!audioCtx) return
+
+  try {
+    if (audioCtx.state === "suspended") void audioCtx.resume()
+    const t = audioCtx.currentTime
+    beep(392, t, 0.12, 0.11)
+    beep(523, t + 0.14, 0.14, 0.11)
+    beep(659, t + 0.3, 0.2, 0.1)
+  } catch {
+    // ignorar
+  }
+}
+
+export function notificarEntradaAlumno(nombreAlumno: string) {
+  if (typeof window === "undefined" || !("Notification" in window)) return
+  if (Notification.permission !== "granted") return
+  if (!nombreAlumno.trim()) return
+
+  try {
+    const n = new Notification("Alguien se unió a la clase", {
+      body: `${nombreAlumno.trim()} entró. Ya está en la sala de voz de la clase.`,
+      icon: "/logoes.png",
+      tag: "entrada-clase-es",
+    })
+    n.onclick = () => {
+      window.focus()
+      n.close()
+    }
+  } catch {
+    // ignorar
+  }
+}
+
 export function reproducirSonidoSolicitudUnion() {
   if (typeof window === "undefined") return
   const ahora = Date.now()

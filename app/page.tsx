@@ -34,6 +34,7 @@ import PantallaAcceso from "@/components/PantallaAcceso"
 import PanelMaestro from "@/components/PanelMaestro"
 import MaterialesMaestro from "@/components/MaterialesMaestro"
 import UnirseAGrupoIndependiente from "@/components/UnirseAGrupoIndependiente"
+import AvisosEntradaClase from "@/components/AvisosEntradaClase"
 import PdfErrorBoundary from "@/components/PdfErrorBoundary"
 import {
   getFechaDestacadaEnSemana,
@@ -41,10 +42,13 @@ import {
   getSemanaActual,
 } from "@/lib/semana"
 import {
+  anunciarEntradaChat,
   getChatSessionId,
   guardarNombreChat,
   iniciarPresenciaEnApp,
 } from "@/lib/chat"
+import { desbloquearSonidosEnInteraccion, prepararMicrofonoClase } from "@/lib/audioClase"
+import { cargarScriptJitsi } from "@/lib/salaVoz"
 import { useMediaLg } from "@/hooks/useMediaLg"
 import { CHAT_ABRIR_EVENT, CHAT_NO_LEIDOS_EVENT } from "@/lib/chatNotificaciones"
 import { prepararSonidoChat } from "@/lib/chatNotificaciones"
@@ -109,6 +113,7 @@ export default function Home() {
   const chatNombre = sesion?.nombre ?? ""
   const modoIndependiente = sesion ? esModoIndependiente(sesion.claseId) : false
   const esMaestro = sesion?.rol === "maestro"
+  const vozClaseActiva = Boolean(sesion && claseId && !modoIndependiente)
 
   useEffect(() => {
     const s = leerSesion()
@@ -138,8 +143,18 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    desbloquearSonidosEnInteraccion()
+  }, [])
+
+  useEffect(() => {
+    if (!vozClaseActiva) return
+    void cargarScriptJitsi().catch(() => {})
+  }, [vozClaseActiva])
+
+  useEffect(() => {
     if (!chatNombre || !claseId) return
     const sessionId = getChatSessionId()
+    void anunciarEntradaChat(claseId, chatNombre, sessionId)
     return iniciarPresenciaEnApp(claseId, chatNombre, sessionId)
   }, [chatNombre, claseId])
 
@@ -290,6 +305,7 @@ export default function Home() {
       guardarSesion(nueva)
       guardarNombreChat(chatNombre)
       prepararSonidoChat()
+      void prepararMicrofonoClase()
       setSesion(nueva)
       setNotasClase({})
       setCargandoClase(true)
@@ -323,6 +339,9 @@ export default function Home() {
   function handleEntrarSesion(nueva: SesionUsuario) {
     guardarNombreChat(nueva.nombre)
     prepararSonidoChat()
+    if (nueva.rol === "maestro" || nueva.rol === "alumno") {
+      void prepararMicrofonoClase()
+    }
     setSesion(nueva)
     setNotasClase({})
     setCargandoClase(true)
@@ -441,6 +460,9 @@ export default function Home() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
+      {vozClaseActiva && (
+        <AvisosEntradaClase claseId={claseId} nombre={chatNombre} esMaestro={esMaestro} />
+      )}
       <div
         className={`layout-pdf-panel flex min-h-0 min-w-0 flex-col bg-slate-50 lg:border-r lg:border-border ${
           mobileTab === "pdf" ? "flex flex-1" : "hidden lg:flex"
@@ -576,6 +598,7 @@ export default function Home() {
         <ComunicacionPanel
           claseId={claseId}
           nombre={chatNombre}
+          vozAutomatica={isLg && vozClaseActiva}
           activoChat={isLg}
           visible
           onSalaVozChange={setEnSalaVoz}
@@ -584,14 +607,19 @@ export default function Home() {
       </aside>
 
       <div
-        className={`flex min-h-0 flex-1 flex-col bg-surface p-3 md:p-4 lg:hidden ${
-          mobileTab === "chat" || enSalaVoz ? "flex" : "hidden"
-        } ${mobileTab !== "chat" && enSalaVoz ? "pointer-events-none fixed left-0 top-0 z-0 h-px w-px overflow-hidden opacity-0" : ""}`}
-        aria-hidden={mobileTab !== "chat" && enSalaVoz}
+        className={`flex min-h-0 flex-col bg-surface p-3 md:p-4 lg:hidden ${
+          mobileTab === "chat"
+            ? "min-h-0 flex-1 flex"
+            : vozClaseActiva
+              ? "pointer-events-none fixed left-0 top-0 z-0 h-px w-px overflow-hidden opacity-0"
+              : "hidden"
+        }`}
+        aria-hidden={mobileTab !== "chat"}
       >
         <ComunicacionPanel
           claseId={claseId}
           nombre={chatNombre}
+          vozAutomatica={!isLg && vozClaseActiva}
           activoChat={!isLg && mobileTab === "chat"}
           visible={mobileTab === "chat"}
           onSalaVozChange={setEnSalaVoz}

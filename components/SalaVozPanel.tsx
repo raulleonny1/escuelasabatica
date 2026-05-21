@@ -1,11 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useRef, useState } from "react"
 import {
   cargarScriptJitsi,
   JITSI_DOMAIN,
   nombreSalaVozJitsi,
 } from "@/lib/salaVoz"
+import { liberarConexionVoz, reclamarConexionVoz } from "@/lib/vozConexion"
 import {
   iniciarHeartbeatVoz,
   subscribeUsuariosEnVoz,
@@ -15,6 +16,8 @@ import {
 interface SalaVozPanelProps {
   claseId: string
   nombre: string
+  /** Entrar a la voz al abrir la clase, sin botón (estilo Zoom) */
+  vozAutomatica?: boolean
   visible?: boolean
   onSalaVozChange?: (enSala: boolean) => void
   className?: string
@@ -23,21 +26,26 @@ interface SalaVozPanelProps {
 export default function SalaVozPanel({
   claseId,
   nombre,
+  vozAutomatica = false,
   visible = true,
   onSalaVozChange,
   className = "",
 }: SalaVozPanelProps) {
+  const panelId = useId()
   const contenedorRef = useRef<HTMLDivElement>(null)
   const apiRef = useRef<JitsiMeetExternalAPI | null>(null)
+  const autoIniciadoRef = useRef(false)
   const [enSala, setEnSala] = useState(false)
   const [conectando, setConectando] = useState(false)
   const [solicitudUnirse, setSolicitudUnirse] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [enVoz, setEnVoz] = useState<UsuarioEnVoz[]>([])
   const [micActivo, setMicActivo] = useState(true)
+  const [esDuenoConexion, setEsDuenoConexion] = useState(false)
 
   const roomName = nombreSalaVozJitsi(claseId)
   const montarContenedor = solicitudUnirse || enSala
+  const modoZoom = vozAutomatica && esDuenoConexion
 
   const notificarEnSala = useCallback(
     (valor: boolean) => {
@@ -64,11 +72,14 @@ export default function SalaVozPanel({
     if (contenedorRef.current) {
       contenedorRef.current.innerHTML = ""
     }
+    liberarConexionVoz(panelId)
+    setEsDuenoConexion(false)
     notificarEnSala(false)
     setConectando(false)
     setSolicitudUnirse(false)
     setMicActivo(true)
-  }, [notificarEnSala])
+    autoIniciadoRef.current = false
+  }, [notificarEnSala, panelId])
 
   useEffect(() => {
     return () => {
@@ -82,7 +93,25 @@ export default function SalaVozPanel({
   }, [enSala, claseId, nombre])
 
   useEffect(() => {
+    if (!vozAutomatica || !claseId || !nombre.trim()) return
+    if (autoIniciadoRef.current) return
+    if (!reclamarConexionVoz(panelId)) return
+
+    setEsDuenoConexion(true)
+    autoIniciadoRef.current = true
+    setError(null)
+    setSolicitudUnirse(true)
+
+    void cargarScriptJitsi().catch(() => {})
+
+    return () => {
+      liberarConexionVoz(panelId)
+    }
+  }, [vozAutomatica, claseId, nombre, panelId])
+
+  useEffect(() => {
     if (!solicitudUnirse || enSala || apiRef.current) return
+    if (vozAutomatica && !esDuenoConexion) return
     if (!claseId || !nombre.trim()) return
 
     let cancelado = false
@@ -184,10 +213,22 @@ export default function SalaVozPanel({
       cancelado = true
       cancelAnimationFrame(id)
     }
-  }, [solicitudUnirse, enSala, claseId, nombre, roomName, notificarEnSala, salirSala])
+  }, [
+    solicitudUnirse,
+    enSala,
+    claseId,
+    nombre,
+    roomName,
+    notificarEnSala,
+    salirSala,
+    vozAutomatica,
+    esDuenoConexion,
+  ])
 
   function unirseAVoz() {
     if (!claseId || !nombre.trim() || enSala || conectando || solicitudUnirse) return
+    if (!reclamarConexionVoz(panelId)) return
+    setEsDuenoConexion(true)
     setError(null)
     setSolicitudUnirse(true)
   }
@@ -210,7 +251,9 @@ export default function SalaVozPanel({
           Sala de voz grupal
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
-          Como una llamada abierta: quien entra escucha y puede hablar. Solo audio (sin cámara).
+          {modoZoom
+            ? "Al entrar a la clase te conectamos a la voz, como en Zoom. Solo audio (sin cámara)."
+            : "Como una llamada abierta: quien entra escucha y puede hablar. Solo audio (sin cámara)."}
         </p>
         {otrosEnVoz.length > 0 ? (
           <p className="mt-1.5 text-[11px] text-violet-800">
@@ -224,7 +267,7 @@ export default function SalaVozPanel({
         )}
       </div>
 
-      {!enSala && !conectando && (
+      {!enSala && !conectando && !modoZoom && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
           <span className="text-4xl" aria-hidden>
             🎙️
@@ -249,8 +292,24 @@ export default function SalaVozPanel({
         </div>
       )}
 
-      {conectando && !enSala && visible && (
-        <p className="py-6 text-center text-sm text-violet-800">Conectando a la sala de voz…</p>
+      {!enSala && (conectando || (modoZoom && solicitudUnirse)) && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4">
+          <span
+            className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"
+            aria-hidden
+          />
+          <p className="text-center text-sm font-medium text-violet-900">
+            Conectando a la voz de la clase…
+          </p>
+          <p className="max-w-xs text-center text-xs text-slate-500">
+            Permite el micrófono si el navegador lo pide. Puedes seguir leyendo el PDF.
+          </p>
+          {error && (
+            <p className="max-w-xs text-center text-xs text-red-600" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
       )}
 
       {montarContenedor && (

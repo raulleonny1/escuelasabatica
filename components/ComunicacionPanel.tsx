@@ -9,6 +9,8 @@ type TabComunicacion = "texto" | "voz"
 interface ComunicacionPanelProps {
   claseId: string
   nombre: string
+  /** Conectar voz al entrar (maestro/alumno en clase con código) */
+  vozAutomatica?: boolean
   activoChat?: boolean
   visible?: boolean
   onSalaVozChange?: (enSala: boolean) => void
@@ -18,12 +20,13 @@ interface ComunicacionPanelProps {
 export default function ComunicacionPanel({
   claseId,
   nombre,
+  vozAutomatica = false,
   activoChat = false,
   visible = true,
   onSalaVozChange,
   className = "",
 }: ComunicacionPanelProps) {
-  const [tab, setTab] = useState<TabComunicacion>("texto")
+  const [tab, setTab] = useState<TabComunicacion>(vozAutomatica ? "voz" : "texto")
   const [enSalaVoz, setEnSalaVoz] = useState(false)
 
   function handleSalaVoz(en: boolean) {
@@ -32,7 +35,7 @@ export default function ComunicacionPanel({
   }
 
   const pestañaVozVisible = visible && tab === "voz"
-  const montarVoz = tab === "voz" || enSalaVoz
+  const montarVoz = vozAutomatica || tab === "voz" || enSalaVoz
 
   return (
     <section
@@ -95,6 +98,7 @@ export default function ComunicacionPanel({
           <SalaVozPanel
             claseId={claseId}
             nombre={nombre}
+            vozAutomatica={vozAutomatica}
             visible={pestañaVozVisible}
             onSalaVozChange={handleSalaVoz}
             className="min-h-0 flex-1"
