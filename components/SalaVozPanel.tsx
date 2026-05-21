@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import {
   cargarScriptJitsi,
   JITSI_DOMAIN,
@@ -42,10 +42,12 @@ export default function SalaVozPanel({
   const [enVoz, setEnVoz] = useState<UsuarioEnVoz[]>([])
   const [micActivo, setMicActivo] = useState(true)
   const [falloConexion, setFalloConexion] = useState(false)
+  const [jitsiEnPantalla, setJitsiEnPantalla] = useState(false)
 
   const roomName = nombreSalaVozJitsi(claseId)
   const montarContenedor = solicitudUnirse || enSala
   const modoZoom = vozAutomatica
+  const mostrarCargando = (conectando || (solicitudUnirse && !enSala)) && !falloConexion
 
   const notificarEnSala = useCallback(
     (valor: boolean) => {
@@ -77,16 +79,10 @@ export default function SalaVozPanel({
     setSolicitudUnirse(false)
     setMicActivo(true)
     setFalloConexion(false)
+    setJitsiEnPantalla(false)
     autoIniciadoRef.current = false
     conectadoRef.current = false
   }, [notificarEnSala])
-
-  /** Jitsi en contenedor de 1px no termina la conexión en móvil */
-  const claseContenedorJitsi = visible
-    ? enSala
-      ? "min-h-[220px] flex-1 bg-slate-900"
-      : "min-h-[200px] flex-1 bg-slate-900"
-    : "pointer-events-none fixed left-0 top-0 z-[-1] h-[360px] w-[min(100vw,480px)] max-w-[480px] overflow-hidden opacity-0"
 
   useEffect(() => {
     return () => {
@@ -111,42 +107,74 @@ export default function SalaVozPanel({
     void cargarScriptJitsi().catch(() => {})
   }, [vozAutomatica, claseId, nombre])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!solicitudUnirse || enSala || apiRef.current) return
     if (!claseId || !nombre.trim()) return
 
-    let fallbackTimer: number | null = null
+    const timers: number[] = []
     let observerIframe: MutationObserver | null = null
+    let pollIframe: number | null = null
 
     canceladoRef.current = false
     conectadoRef.current = false
+    setJitsiEnPantalla(false)
+
+    function limpiarTimers() {
+      timers.forEach((t) => window.clearTimeout(t))
+      timers.length = 0
+      if (pollIframe) window.clearInterval(pollIframe)
+      observerIframe?.disconnect()
+    }
 
     function marcarConectado() {
       if (canceladoRef.current || conectadoRef.current) return
       conectadoRef.current = true
-      if (fallbackTimer) {
-        clearTimeout(fallbackTimer)
-        fallbackTimer = null
-      }
+      limpiarTimers()
+      setJitsiEnPantalla(true)
       notificarEnSala(true)
       setConectando(false)
       setFalloConexion(false)
       setError(null)
+      try {
+        apiRef.current?.executeCommand("toggleAudio")
+      } catch {
+        // ignorar
+      }
+    }
+
+    function alDetectarIframe() {
+      setJitsiEnPantalla(true)
+      timers.push(window.setTimeout(() => marcarConectado(), 800))
+    }
+
+    async function esperarContenedor(intentos = 0): Promise<HTMLDivElement> {
+      const nodo = contenedorRef.current
+      if (nodo) return nodo
+      if (intentos > 40) throw new Error("No se pudo preparar la sala. Intenta de nuevo.")
+      await new Promise((r) => window.setTimeout(r, 50))
+      return esperarContenedor(intentos + 1)
     }
 
     async function conectar() {
       setError(null)
       setConectando(true)
+      setFalloConexion(false)
 
       try {
-        await cargarScriptJitsi()
+        let timeoutRed: number | null = null
+        const limite = new Promise<never>((_, reject) => {
+          timeoutRed = window.setTimeout(
+            () => reject(new Error("La sala de voz tardó demasiado. Comprueba tu red.")),
+            20000
+          )
+        })
 
+        await Promise.race([cargarScriptJitsi(), limite])
+        if (timeoutRed) window.clearTimeout(timeoutRed)
         if (canceladoRef.current) return
 
-        const nodo = contenedorRef.current
-        if (!nodo) {
-          throw new Error("No se pudo preparar la sala. Intenta de nuevo.")
-        }
+        const nodo = await esperarContenedor()
+        if (canceladoRef.current) return
 
         nodo.innerHTML = ""
 
@@ -157,7 +185,7 @@ export default function SalaVozPanel({
           height: "100%",
           userInfo: { displayName: nombre.trim().slice(0, 32) },
           configOverwrite: {
-            startWithAudioMuted: false,
+            startWithAudioMuted: true,
             startWithVideoMuted: true,
             prejoinPageEnabled: false,
             enableLobby: false,
@@ -167,6 +195,7 @@ export default function SalaVozPanel({
             disableInviteFunctions: true,
             hideConferenceSubject: true,
             enableWelcomePage: false,
+            disableThirdPartyRequests: true,
             subject: "Escuela Sabática — voz grupal",
           },
           interfaceConfigOverwrite: {
@@ -185,50 +214,48 @@ export default function SalaVozPanel({
 
         apiRef.current = api
 
+        const eventos = [
+          "videoConferenceJoined",
+          "participantJoined",
+          "participantRoleChanged",
+          "audioMuteStatusChanged",
+        ]
         api.addListener("videoConferenceJoined", marcarConectado)
-
+        api.addListener("participantJoined", (payload: unknown) => {
+          const p = payload as { id?: string }
+          if (p?.id === "local" || p?.id?.includes("local")) marcarConectado()
+        })
         api.addListener("audioMuteStatusChanged", (payload: unknown) => {
           const p = payload as { muted?: boolean }
           if (typeof p?.muted === "boolean") setMicActivo(!p.muted)
         })
 
-        api.addListener("readyToClose", () => {
-          salirSala()
-        })
-
-        api.addListener("errorOccurred", (payload: unknown) => {
-          const p = payload as { error?: { name?: string } }
-          const msg = p?.error?.name
-          if (msg && !conectadoRef.current) {
-            setError(
-              "No se pudo usar el micrófono. Revisa permisos del navegador e intenta de nuevo."
-            )
-            setConectando(false)
-          }
-        })
+        api.addListener("readyToClose", () => salirSala())
 
         observerIframe = new MutationObserver(() => {
-          if (!nodo.querySelector("iframe")) return
-          window.setTimeout(() => {
-            if (!conectadoRef.current) marcarConectado()
-          }, 1500)
+          if (nodo.querySelector("iframe")) alDetectarIframe()
         })
         observerIframe.observe(nodo, { childList: true, subtree: true })
 
-        fallbackTimer = window.setTimeout(() => {
-          if (!canceladoRef.current && apiRef.current === api) {
-            marcarConectado()
-          }
-        }, 5000)
+        pollIframe = window.setInterval(() => {
+          if (nodo.querySelector("iframe")) alDetectarIframe()
+        }, 400)
 
-        window.setTimeout(() => {
-          if (!conectadoRef.current && !canceladoRef.current) {
-            setFalloConexion(true)
-            setConectando(false)
-          }
-        }, 14000)
+        timers.push(window.setTimeout(() => marcarConectado(), 2500))
+        timers.push(window.setTimeout(() => marcarConectado(), 4500))
+
+        timers.push(
+          window.setTimeout(() => {
+            if (!conectadoRef.current && !canceladoRef.current) {
+              setFalloConexion(true)
+              setConectando(false)
+              setError("No se pudo conectar. Permite el micrófono y pulsa Reintentar.")
+            }
+          }, 22000)
+        )
       } catch (e) {
         if (canceladoRef.current) return
+        limpiarTimers()
         setConectando(false)
         setSolicitudUnirse(false)
         setFalloConexion(true)
@@ -240,26 +267,13 @@ export default function SalaVozPanel({
       }
     }
 
-    const id = requestAnimationFrame(() => {
-      void conectar()
-    })
+    void conectar()
 
     return () => {
       canceladoRef.current = true
-      if (fallbackTimer) clearTimeout(fallbackTimer)
-      observerIframe?.disconnect()
-      cancelAnimationFrame(id)
+      limpiarTimers()
     }
-  }, [
-    solicitudUnirse,
-    enSala,
-    claseId,
-    nombre,
-    roomName,
-    notificarEnSala,
-    salirSala,
-    vozAutomatica,
-  ])
+  }, [solicitudUnirse, enSala, claseId, nombre, roomName, notificarEnSala, salirSala])
 
   function unirseAVoz() {
     if (!claseId || !nombre.trim() || enSala || conectando || solicitudUnirse) return
@@ -350,36 +364,26 @@ export default function SalaVozPanel({
 
       {montarContenedor && (
         <div
-          ref={contenedorRef}
-          className={claseContenedorJitsi}
+          className={`relative min-h-[200px] flex-1 ${
+            visible ? "" : "pointer-events-none fixed left-0 top-0 z-[-1] h-[360px] w-[min(100vw,480px)] max-w-[480px] overflow-hidden opacity-0"
+          }`}
           aria-hidden={!visible && !enSala}
-        />
-      )}
-
-      {vozAutomatica && !enSala && conectando && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4">
-          <span
-            className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"
-            aria-hidden
-          />
-          <p className="text-center text-sm font-medium text-violet-900">
-            Entrando a la voz de la clase…
-          </p>
-          <p className="max-w-xs text-center text-xs text-slate-500">
-            Acepta el micrófono si el navegador lo pide.
-          </p>
-        </div>
-      )}
-
-      {!vozAutomatica && !enSala && conectando && (
-        <div className="flex shrink-0 flex-col items-center gap-2 border-t border-violet-100 bg-violet-50/50 px-3 py-3">
-          <span
-            className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"
-            aria-hidden
-          />
-          <p className="text-center text-xs font-medium text-violet-900">
-            Conectando a la voz…
-          </p>
+        >
+          <div ref={contenedorRef} className="h-full min-h-[200px] w-full bg-slate-900" />
+          {mostrarCargando && !jitsiEnPantalla && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/92 p-4">
+              <span
+                className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"
+                aria-hidden
+              />
+              <p className="text-center text-sm font-medium text-violet-900">
+                Entrando a la voz de la clase…
+              </p>
+              <p className="max-w-xs text-center text-xs text-slate-500">
+                Acepta el micrófono si el navegador lo pide.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
