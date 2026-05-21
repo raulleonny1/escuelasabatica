@@ -1,4 +1,5 @@
 import type { Viewport } from "next"
+import Script from "next/script"
 import { Lora, Source_Sans_3 } from "next/font/google"
 import AppHeader from "@/components/AppHeader"
 import PwaInstallPrompt from "@/components/PwaInstallPrompt"
@@ -51,9 +52,14 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const textSizeBoot = `(function(){try{var s=localStorage.getItem("es-text-size");if(s!=null&&s!=="0")document.documentElement.dataset.textSize=s}catch(e){}})();`
+
   return (
-    <html lang="es" className={`${lora.variable} ${sourceSans.variable}`}>
+    <html lang="es" data-text-size="0" className={`${lora.variable} ${sourceSans.variable}`}>
       <body className="m-0 p-0 antialiased">
+        <Script id="es-text-size-boot" strategy="beforeInteractive">
+          {textSizeBoot}
+        </Script>
         <div className="flex h-dvh flex-col overflow-hidden">
           <AppHeader />
 

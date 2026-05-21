@@ -162,7 +162,7 @@ export default function Biblia({ agregarVersiculo }: BibliaProps) {
       {libro && capitulo && versiculos.length > 0 && (
         <>
           <p className="text-xs text-muted">
-            Toca un versículo para añadirlo a tus notas
+            Toca un versículo para verlo en el banner junto a la lección
           </p>
           <div className="space-y-1 border-t border-border pt-2">
             {versiculos.map((v) => (

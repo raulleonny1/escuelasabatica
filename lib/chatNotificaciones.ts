@@ -34,6 +34,7 @@ export function mensajeEsParaMi(texto: string, miNombre: string): boolean {
 
 let audioCtx: AudioContext | null = null
 let ultimoSonidoMs = 0
+let ultimoSonidoUnionMs = 0
 let audioListo = false
 
 /** El navegador exige un clic antes de reproducir sonido */
@@ -52,6 +53,20 @@ export function prepararSonidoChat() {
   }
 }
 
+function beep(freq: number, start: number, dur: number, vol = 0.12) {
+  if (!audioCtx) return
+  const osc = audioCtx.createOscillator()
+  const gain = audioCtx.createGain()
+  osc.connect(gain)
+  gain.connect(audioCtx.destination)
+  osc.frequency.value = freq
+  osc.type = "sine"
+  gain.gain.setValueAtTime(vol, start)
+  gain.gain.exponentialRampToValueAtTime(0.001, start + dur)
+  osc.start(start)
+  osc.stop(start + dur)
+}
+
 export function reproducirSonidoMensajeDirecto() {
   if (typeof window === "undefined") return
   const ahora = Date.now()
@@ -63,18 +78,27 @@ export function reproducirSonidoMensajeDirecto() {
 
   try {
     if (audioCtx.state === "suspended") void audioCtx.resume()
+    beep(880, audioCtx.currentTime, 0.22)
+  } catch {
+    // ignorar
+  }
+}
 
+/** Dos tonos suaves: alguien pidió unirse a la clase (maestro) */
+export function reproducirSonidoSolicitudUnion() {
+  if (typeof window === "undefined") return
+  const ahora = Date.now()
+  if (ahora - ultimoSonidoUnionMs < 800) return
+  ultimoSonidoUnionMs = ahora
+
+  prepararSonidoChat()
+  if (!audioCtx) return
+
+  try {
+    if (audioCtx.state === "suspended") void audioCtx.resume()
     const t = audioCtx.currentTime
-    const osc = audioCtx.createOscillator()
-    const gain = audioCtx.createGain()
-    osc.connect(gain)
-    gain.connect(audioCtx.destination)
-    osc.frequency.value = 880
-    osc.type = "sine"
-    gain.gain.setValueAtTime(0.12, t)
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22)
-    osc.start(t)
-    osc.stop(t + 0.22)
+    beep(523, t, 0.14, 0.1)
+    beep(659, t + 0.16, 0.18, 0.1)
   } catch {
     // ignorar
   }
@@ -98,6 +122,27 @@ export async function solicitarPermisoNotificaciones(): Promise<boolean> {
   if (Notification.permission === "denied") return false
   const perm = await Notification.requestPermission()
   return perm === "granted"
+}
+
+export function notificarSolicitudUnion(nombreSolicitante: string, nombreClase: string) {
+  if (typeof window === "undefined" || !("Notification" in window)) return
+  if (Notification.permission !== "granted") return
+  if (!nombreSolicitante.trim()) return
+
+  const clase = nombreClase.trim() || "tu clase"
+  try {
+    const n = new Notification("Alguien quiere unirse", {
+      body: `${nombreSolicitante.trim()} pidió entrar a «${clase}». Revisa tu panel de maestro.`,
+      icon: "/logoes.png",
+      tag: "solicitud-union-es",
+    })
+    n.onclick = () => {
+      window.focus()
+      n.close()
+    }
+  } catch {
+    // ignorar
+  }
 }
 
 export function notificarMensajeChat(de: string, texto: string, paraNombre: string) {

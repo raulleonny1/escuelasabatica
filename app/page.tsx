@@ -1,21 +1,39 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import Biblia from "@/components/Biblia"
 import dynamic from "next/dynamic"
 import {
-  subscribeComentarios,
-  guardarComentario,
-  eliminarComentario,
-  leerComentariosLocal,
-  migrarComentariosLocales,
-  guardarComentariosLocal,
+  subscribeComentariosClase,
+  guardarComentarioClase,
+  eliminarComentarioClase,
+  leerComentariosClaseLocal,
+  migrarComentariosClaseLocales,
+  guardarComentariosClaseLocal,
+  idDocumentoComentario,
+  misComentariosPorFecha,
+  type NotaClase,
 } from "@/lib/comentarios"
+import { esModoIndependiente, guardarClaseLocal, unirseAClase } from "@/lib/clase"
+import { marcarGrupoEnEstudio, quitarGrupoEnEstudio } from "@/lib/gruposEnEstudio"
+import { guardarSesion, leerSesion, type SesionUsuario } from "@/lib/sesionUsuario"
+import { IR_MENU_PRINCIPAL_EVENT } from "@/lib/navegacion"
+import {
+  ESTUDIO_INICIADO_EVENT,
+  getEstudioDeHoy,
+  iniciarSesionEstudio,
+  subscribeSesionEstudio,
+  type SesionEstudio,
+} from "@/lib/sesionEstudio"
 
 import LeccionControls from "@/components/LeccionControls"
 import NotasPanel from "@/components/NotasPanel"
-import ChatNombreModal from "@/components/ChatNombreModal"
-import ChatPanel from "@/components/ChatPanel"
+import ComunicacionPanel from "@/components/ComunicacionPanel"
+import IniciarEstudioButton from "@/components/IniciarEstudioButton"
+import PantallaAcceso from "@/components/PantallaAcceso"
+import PanelMaestro from "@/components/PanelMaestro"
+import MaterialesMaestro from "@/components/MaterialesMaestro"
+import UnirseAGrupoIndependiente from "@/components/UnirseAGrupoIndependiente"
 import PdfErrorBoundary from "@/components/PdfErrorBoundary"
 import {
   getFechaDestacadaEnSemana,
@@ -26,11 +44,18 @@ import {
   getChatSessionId,
   guardarNombreChat,
   iniciarPresenciaEnApp,
-  leerNombreChat,
 } from "@/lib/chat"
 import { useMediaLg } from "@/hooks/useMediaLg"
 import { CHAT_ABRIR_EVENT, CHAT_NO_LEIDOS_EVENT } from "@/lib/chatNotificaciones"
-import { safeLocalRemove, safeSessionRemove } from "@/lib/storage"
+import { prepararSonidoChat } from "@/lib/chatNotificaciones"
+import {
+  comentariosOtrosEnFecha,
+  guardarPreferenciaCompartir,
+  listarNotasCompartidasDelGrupo,
+  miPreferenciaCompartir,
+  subscribePreferenciasCompartir,
+  type PreferenciaCompartir,
+} from "@/lib/compartirNotas"
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
 
@@ -38,24 +63,34 @@ type MobileTab = "pdf" | "estudio" | "chat"
 
 export default function Home() {
   const [showModal, setShowModal] = useState(false)
+  const [showModalOtros, setShowModalOtros] = useState(false)
+  const [showAvisoCompartir, setShowAvisoCompartir] = useState(false)
+  const [preferenciasCompartir, setPreferenciasCompartir] = useState<PreferenciaCompartir[]>([])
   const [editFecha, setEditFecha] = useState<string | null>(null)
   const [editTexto, setEditTexto] = useState("")
   const [BibliaPasaje, setBibliaPasaje] = useState("")
   const [semana, setSemana] = useState(() => getSemanaActual())
   const [tipo, setTipo] = useState("leccion")
-  const [comentariosPorFecha, setComentariosPorFecha] = useState<Record<string, string>>({})
+  const [notasClase, setNotasClase] = useState<Record<string, NotaClase>>({})
   const [comentario, setComentario] = useState("")
   const [selectedDate, setSelectedDate] = useState(() =>
     getFechaDestacadaEnSemana(getSemanaActual())
   )
-  const [cargandoComentarios, setCargandoComentarios] = useState(true)
+  const [cargandoClase, setCargandoClase] = useState(true)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [mobileTab, setMobileTab] = useState<MobileTab>("pdf")
   const [leccionJump, setLeccionJump] = useState(0)
-  const [chatNombre, setChatNombre] = useState<string | null>(null)
-  const [chatNombreListo, setChatNombreListo] = useState(false)
+  const [sesion, setSesion] = useState<SesionUsuario | null>(null)
+  const [sesionListo, setSesionListo] = useState(false)
   const [chatNoLeidos, setChatNoLeidos] = useState(0)
+  const [enSalaVoz, setEnSalaVoz] = useState(false)
+  const [sesionActiva, setSesionActiva] = useState<SesionEstudio | null>(null)
+  const [iniciandoEstudio, setIniciandoEstudio] = useState(false)
+  const [materialMaestroPdf, setMaterialMaestroPdf] = useState<{
+    url: string
+    titulo: string
+  } | null>(null)
   const isLg = useMediaLg()
 
   function formatDateDMY(dateStr: string) {
@@ -65,22 +100,68 @@ export default function Home() {
   }
 
   function agregarVersiculo(v: string) {
-    setComentario((prev) => (prev ? prev + "\n" + v : v))
     setBibliaPasaje(v)
-    setMobileTab("estudio")
+    setMobileTab("pdf")
   }
 
+  const claseId = sesion?.claseId ?? ""
+  const claseNombre = sesion?.claseNombre ?? ""
+  const chatNombre = sesion?.nombre ?? ""
+  const modoIndependiente = sesion ? esModoIndependiente(sesion.claseId) : false
+  const esMaestro = sesion?.rol === "maestro"
+
   useEffect(() => {
-    const guardado = leerNombreChat()
-    setChatNombre(guardado || null)
-    setChatNombreListo(true)
+    const s = leerSesion()
+    setSesion(s)
+    if (s) {
+      guardarNombreChat(s.nombre)
+    }
+    setSesionListo(true)
   }, [])
 
   useEffect(() => {
-    if (!chatNombre) return
+    const sync = () => {
+      const s = leerSesion()
+      setSesion(s)
+      if (!s) {
+        setMaterialMaestroPdf(null)
+        setChatNoLeidos(0)
+        setEnSalaVoz(false)
+      }
+    }
+    window.addEventListener("sesion-actualizada", sync)
+    window.addEventListener(IR_MENU_PRINCIPAL_EVENT, sync)
+    return () => {
+      window.removeEventListener("sesion-actualizada", sync)
+      window.removeEventListener(IR_MENU_PRINCIPAL_EVENT, sync)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!chatNombre || !claseId) return
     const sessionId = getChatSessionId()
-    return iniciarPresenciaEnApp(chatNombre, sessionId)
-  }, [chatNombre])
+    return iniciarPresenciaEnApp(claseId, chatNombre, sessionId)
+  }, [chatNombre, claseId])
+
+  useEffect(() => {
+    if (!claseId) return
+    return subscribeSesionEstudio(claseId, setSesionActiva, () => {})
+  }, [claseId])
+
+  useEffect(() => {
+    const onEstudio = (e: Event) => {
+      const det = (e as CustomEvent<{ semana: number; fecha: string }>).detail
+      if (!det?.semana || !det?.fecha) return
+      setSemana(det.semana)
+      setSelectedDate(det.fecha)
+      setTipo("leccion")
+      setLeccionJump((n) => n + 1)
+      setMobileTab("pdf")
+      setComentario(misComentariosPorFecha(notasClase, chatNombre)[det.fecha]?.texto ?? "")
+    }
+    window.addEventListener(ESTUDIO_INICIADO_EVENT, onEstudio)
+    return () => window.removeEventListener(ESTUDIO_INICIADO_EVENT, onEstudio)
+  }, [claseId, notasClase, chatNombre])
 
   useEffect(() => {
     const onNoLeidos = (e: Event) => {
@@ -97,50 +178,94 @@ export default function Home() {
     }
   }, [])
 
-  function handleConfirmarNombreChat(nombre: string) {
-    guardarNombreChat(nombre)
-    setChatNombre(nombre)
-  }
-
-  function handleCambiarNombreChat() {
-    safeLocalRemove("chatNombre")
-    safeSessionRemove("chatJoinAnnounced")
-    setChatNombre(null)
-  }
-
   useEffect(() => {
-    let migrado = false
+    if (!claseId) {
+      setCargandoClase(false)
+      return
+    }
 
-    const unsubscribe = subscribeComentarios(
+    let migrado = false
+    setCargandoClase(true)
+
+    const unsubscribe = subscribeComentariosClase(
+      claseId,
       async (data) => {
         if (!migrado && Object.keys(data).length === 0) {
-          const local = leerComentariosLocal()
+          const local = leerComentariosClaseLocal(claseId)
           if (Object.keys(local).length > 0) {
             try {
-              await migrarComentariosLocales(local)
+              await migrarComentariosClaseLocales(claseId, local)
             } catch {
-              setComentariosPorFecha(local)
-              setSyncError("Sin conexión. Mostrando comentarios guardados en este dispositivo.")
+              setNotasClase(local)
+              setSyncError("Sin conexión. Mostrando notas de clase guardadas aquí.")
             }
             migrado = true
             return
           }
         }
         migrado = true
-        setComentariosPorFecha(data)
+        setNotasClase(data)
         setSyncError(null)
-        setCargandoComentarios(false)
+        setCargandoClase(false)
       },
       () => {
-        const local = leerComentariosLocal()
-        setComentariosPorFecha(local)
-        setSyncError("Sin conexión a Firebase. Usando comentarios locales.")
-        setCargandoComentarios(false)
+        setNotasClase(leerComentariosClaseLocal(claseId))
+        setSyncError("Sin conexión a Firebase. Notas de clase solo en caché local.")
+        setCargandoClase(false)
       }
     )
 
     return () => unsubscribe()
-  }, [])
+  }, [claseId])
+
+  useEffect(() => {
+    if (!claseId) {
+      setPreferenciasCompartir([])
+      return
+    }
+    return subscribePreferenciasCompartir(claseId, setPreferenciasCompartir)
+  }, [claseId])
+
+  const yoCompartoNotas =
+    miPreferenciaCompartir(preferenciasCompartir, chatNombre)?.aceptaCompartir ?? false
+
+  const misComentarios = useMemo(
+    () => misComentariosPorFecha(notasClase, chatNombre),
+    [notasClase, chatNombre]
+  )
+
+  const notasCompartidasOtros = listarNotasCompartidasDelGrupo(
+    notasClase,
+    preferenciasCompartir,
+    chatNombre,
+    yoCompartoNotas
+  )
+
+  const comentariosOtrosDelDia = comentariosOtrosEnFecha(
+    notasClase,
+    preferenciasCompartir,
+    chatNombre,
+    selectedDate,
+    yoCompartoNotas
+  )
+
+  async function handleCambiarCompartir(acepta: boolean) {
+    if (!claseId || !chatNombre) return
+    try {
+      await guardarPreferenciaCompartir(claseId, chatNombre, acepta)
+      if (!acepta) setShowModalOtros(false)
+    } catch {
+      setSyncError("No se pudo guardar tu preferencia de compartir notas.")
+    }
+  }
+
+  function handleVerComentariosOtros() {
+    if (!yoCompartoNotas) {
+      setShowAvisoCompartir(true)
+      return
+    }
+    setShowModalOtros(true)
+  }
 
   useEffect(() => {
     const dias = getFechasSemana(semana)
@@ -149,59 +274,170 @@ export default function Home() {
     if (!enRango) {
       const fecha = getFechaDestacadaEnSemana(semana)
       setSelectedDate(fecha)
-      setComentario(comentariosPorFecha[fecha] ?? "")
     }
-  }, [semana, selectedDate, comentariosPorFecha])
+  }, [semana, selectedDate])
 
-  async function handleGuardar(fecha: string, texto: string) {
+  async function handleUnidoDesdeIndependiente(claseIdDestino: string, claseNombreDestino: string) {
+    try {
+      await unirseAClase(claseIdDestino, claseNombreDestino)
+      const nueva: SesionUsuario = {
+        rol: "alumno",
+        nombre: chatNombre,
+        claseId: claseIdDestino,
+        claseNombre: claseNombreDestino,
+      }
+      guardarClaseLocal(claseIdDestino, claseNombreDestino)
+      guardarSesion(nueva)
+      guardarNombreChat(chatNombre)
+      prepararSonidoChat()
+      setSesion(nueva)
+      setNotasClase({})
+      setCargandoClase(true)
+    } catch {
+      alert("No se pudo entrar a la clase. Intenta de nuevo.")
+    }
+  }
+
+  useEffect(() => {
+    if (!esMaestro || !claseId || !sesionActiva || !chatNombre) return
+
+    const datos = {
+      nombreClase: claseNombre,
+      maestroNombre: chatNombre,
+      semana: sesionActiva.semana,
+      fecha: sesionActiva.fecha,
+      diaLabel: sesionActiva.diaLabel,
+    }
+
+    void marcarGrupoEnEstudio(claseId, datos)
+    const id = window.setInterval(() => {
+      void marcarGrupoEnEstudio(claseId, datos)
+    }, 60_000)
+
+    return () => {
+      window.clearInterval(id)
+      void quitarGrupoEnEstudio(claseId)
+    }
+  }, [esMaestro, claseId, sesionActiva, claseNombre, chatNombre])
+
+  function handleEntrarSesion(nueva: SesionUsuario) {
+    guardarNombreChat(nueva.nombre)
+    prepararSonidoChat()
+    setSesion(nueva)
+    setNotasClase({})
+    setCargandoClase(true)
+  }
+
+  async function handleGuardarComentario(fecha: string, texto: string) {
+    if (!claseId || !chatNombre) return
     setGuardando(true)
     try {
-      await guardarComentario(fecha, texto, semana)
-      setComentariosPorFecha((prev) => {
-        const nuevo = { ...prev, [fecha]: texto }
-        guardarComentariosLocal(nuevo)
-        return nuevo
+      await guardarComentarioClase(claseId, fecha, texto, chatNombre, semana)
+      const nota: NotaClase = { texto: texto.trim(), autor: chatNombre, semana }
+      const docId = idDocumentoComentario(fecha, chatNombre)
+      setNotasClase((prev) => {
+        const n = { ...prev, [docId]: nota }
+        guardarComentariosClaseLocal(claseId, n)
+        return n
       })
+      setComentario(texto.trim())
       setSyncError(null)
     } catch {
-      setComentariosPorFecha((prev) => {
-        const nuevo = { ...prev, [fecha]: texto }
-        guardarComentariosLocal(nuevo)
-        return nuevo
+      const nota: NotaClase = { texto: texto.trim(), autor: chatNombre, semana }
+      const docId = idDocumentoComentario(fecha, chatNombre)
+      setNotasClase((prev) => {
+        const n = { ...prev, [docId]: nota }
+        guardarComentariosClaseLocal(claseId, n)
+        return n
       })
-      setSyncError("No se pudo sincronizar. Guardado solo en este dispositivo.")
+      setSyncError("No se pudo sincronizar. Guardado en caché de este dispositivo.")
     } finally {
       setGuardando(false)
     }
   }
 
-  async function handleEliminar(fecha: string) {
+  async function handleEliminarComentario(fecha: string) {
+    if (!claseId || !chatNombre) return
     setGuardando(true)
     try {
-      await eliminarComentario(fecha)
-      setComentariosPorFecha((prev) => {
-        const nuevo = { ...prev }
-        delete nuevo[fecha]
-        guardarComentariosLocal(nuevo)
-        return nuevo
+      await eliminarComentarioClase(claseId, fecha, chatNombre)
+      const docId = idDocumentoComentario(fecha, chatNombre)
+      setNotasClase((prev) => {
+        const n = { ...prev }
+        delete n[docId]
+        guardarComentariosClaseLocal(claseId, n)
+        return n
       })
+      if (selectedDate === fecha) setComentario("")
       setSyncError(null)
     } catch {
-      setComentariosPorFecha((prev) => {
-        const nuevo = { ...prev }
-        delete nuevo[fecha]
-        guardarComentariosLocal(nuevo)
-        return nuevo
+      const docId = idDocumentoComentario(fecha, chatNombre)
+      setNotasClase((prev) => {
+        const n = { ...prev }
+        delete n[docId]
+        guardarComentariosClaseLocal(claseId, n)
+        return n
       })
-      setSyncError("No se pudo eliminar en la nube. Eliminado solo en este dispositivo.")
+      setSyncError("No se pudo eliminar en la nube.")
     } finally {
       setGuardando(false)
     }
   }
+
+  /** Misma acción que el botón «Lección»: PDF del día y pestaña lección en móvil */
+  const irALeccionDelDia = useCallback(() => {
+    setMaterialMaestroPdf(null)
+    setTipo("leccion")
+    setLeccionJump((n) => n + 1)
+    setMobileTab("pdf")
+  }, [])
+
+  const handleIniciarEstudio = useCallback(async () => {
+    const hoy = getEstudioDeHoy()
+    setIniciandoEstudio(true)
+    setSemana(hoy.semana)
+    setSelectedDate(hoy.fecha)
+    irALeccionDelDia()
+    setComentario(misComentarios[hoy.fecha]?.texto ?? "")
+    prepararSonidoChat()
+
+    if (claseId && chatNombre) {
+      try {
+        await iniciarSesionEstudio(claseId, chatNombre, hoy.semana, hoy.fecha, claseNombre)
+        await marcarGrupoEnEstudio(claseId, {
+          nombreClase: claseNombre,
+          maestroNombre: chatNombre,
+          semana: hoy.semana,
+          fecha: hoy.fecha,
+          diaLabel: hoy.diaLabel,
+        })
+      } catch {
+        // seguir aunque falle la nube
+      }
+    }
+
+    setIniciandoEstudio(false)
+  }, [claseId, chatNombre, misComentarios, irALeccionDelDia])
 
   const pdfUrl = `/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`
-  const pdfViewerKey =
-    tipo === "leccion" ? `${semana}-leccion-${leccionJump}` : `${semana}-${tipo}`
+  const pdfUrlActivo = materialMaestroPdf?.url ?? pdfUrl
+  const pdfViewerKey = materialMaestroPdf
+    ? `maestro-${materialMaestroPdf.url}`
+    : tipo === "leccion"
+      ? `${semana}-leccion-${leccionJump}`
+      : `${semana}-${tipo}`
+
+  if (!sesionListo) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted">
+        Cargando…
+      </div>
+    )
+  }
+
+  if (!sesion) {
+    return <PantallaAcceso onEntrar={handleEntrarSesion} />
+  }
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
@@ -210,15 +446,37 @@ export default function Home() {
           mobileTab === "pdf" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >
-        <div className="shrink-0 border-b border-border bg-card p-2 lg:hidden">
+        <div className="shrink-0 space-y-2 border-b border-border bg-card p-2 lg:hidden">
+          {esMaestro && (
+            <IniciarEstudioButton
+              onIniciar={() => void handleIniciarEstudio()}
+              cargando={iniciandoEstudio}
+              sesionActiva={sesionActiva}
+            />
+          )}
           <LeccionControls
             semana={semana}
             setSemana={setSemana}
             tipo={tipo}
             setTipo={setTipo}
-            onLeccionClick={() => setLeccionJump((n) => n + 1)}
+            onLeccionClick={irALeccionDelDia}
           />
         </div>
+        {esMaestro && materialMaestroPdf && (
+          <div className="shrink-0 border-b border-amber-300/50 bg-gradient-to-r from-amber-50 to-accent-soft px-3 py-2.5 lg:px-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">
+              Material auxiliar (maestro)
+            </p>
+            <p className="text-sm font-medium text-primary">{materialMaestroPdf.titulo}</p>
+            <button
+              type="button"
+              onClick={() => setMaterialMaestroPdf(null)}
+              className="mt-1.5 text-xs font-medium text-primary underline"
+            >
+              ← Volver a la lección del trimestre
+            </button>
+          </div>
+        )}
         {BibliaPasaje && (
           <div className="border-b border-accent/30 bg-accent-soft px-5 py-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-primary/70 mb-1">
@@ -235,11 +493,11 @@ export default function Home() {
           </div>
         )}
         <div className="relative min-h-0 flex-1 w-full">
-          <PdfErrorBoundary url={pdfUrl}>
+          <PdfErrorBoundary url={pdfUrlActivo}>
             <PdfViewer
               key={pdfViewerKey}
-              url={pdfUrl}
-              irAlDiaLectura={tipo === "leccion"}
+              url={pdfUrlActivo}
+              irAlDiaLectura={!materialMaestroPdf && tipo === "leccion"}
               semana={semana}
             />
           </PdfErrorBoundary>
@@ -251,62 +509,106 @@ export default function Home() {
           mobileTab === "estudio" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >
+        {esMaestro && (
+          <div className="hidden lg:block">
+            <IniciarEstudioButton
+              onIniciar={() => void handleIniciarEstudio()}
+              cargando={iniciandoEstudio}
+              sesionActiva={sesionActiva}
+            />
+          </div>
+        )}
+
         <div className="hidden lg:block">
           <LeccionControls
             semana={semana}
             setSemana={setSemana}
             tipo={tipo}
             setTipo={setTipo}
-            onLeccionClick={() => setLeccionJump((n) => n + 1)}
+            onLeccionClick={irALeccionDelDia}
           />
         </div>
 
+        {esMaestro && <PanelMaestro claseId={claseId} nombreMaestro={chatNombre} />}
+
+        {esMaestro && (
+          <MaterialesMaestro
+            onVerEnPantalla={(url, titulo) => {
+              setMaterialMaestroPdf({ url, titulo })
+              setMobileTab("pdf")
+            }}
+          />
+        )}
+
         <NotasPanel
           semana={semana}
-          comentariosPorFecha={comentariosPorFecha}
+          misComentarios={misComentarios}
+          comentariosOtrosDelDia={comentariosOtrosDelDia}
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
           comentario={comentario}
           setComentario={setComentario}
-          cargandoComentarios={cargandoComentarios}
+          cargando={cargandoClase}
           syncError={syncError}
           guardando={guardando}
           editFecha={editFecha}
           editTexto={editTexto}
           setEditFecha={setEditFecha}
           setEditTexto={setEditTexto}
-          onGuardar={handleGuardar}
-          onEliminar={handleEliminar}
-          onVerTodos={() => setShowModal(true)}
+          onGuardar={handleGuardarComentario}
+          onEliminar={handleEliminarComentario}
+          onVerMisComentarios={() => setShowModal(true)}
+          onVerComentariosOtros={handleVerComentariosOtros}
+          yoCompartoNotas={yoCompartoNotas}
+          onCambiarCompartir={handleCambiarCompartir}
         />
 
         <section className="flex min-h-[min(50vh,360px)] max-h-[min(55vh,480px)] flex-col custom-scroll overflow-y-auto rounded-xl border border-border bg-card p-3 shadow-sm lg:min-h-[320px] lg:max-h-[420px]">
+          {modoIndependiente && (
+            <UnirseAGrupoIndependiente
+              nombre={chatNombre}
+              onUnidoAClase={handleUnidoDesdeIndependiente}
+            />
+          )}
           <Biblia agregarVersiculo={agregarVersiculo} />
         </section>
 
-        {chatNombre && (
-          <ChatPanel
-            nombre={chatNombre}
-            activo={isLg}
-            onCambiarNombre={handleCambiarNombreChat}
-            className="hidden lg:flex lg:min-h-[280px] lg:max-h-[340px]"
-          />
-        )}
+        <ComunicacionPanel
+          claseId={claseId}
+          nombre={chatNombre}
+          activoChat={isLg}
+          visible
+          onSalaVozChange={setEnSalaVoz}
+          className="hidden lg:flex lg:min-h-[320px] lg:max-h-[480px]"
+        />
       </aside>
 
-      {chatNombre && (
-        <div
-          className={`flex min-h-0 flex-1 flex-col bg-surface p-3 md:p-4 lg:hidden ${
-            mobileTab === "chat" ? "flex" : "hidden"
-          }`}
+      <div
+        className={`flex min-h-0 flex-1 flex-col bg-surface p-3 md:p-4 lg:hidden ${
+          mobileTab === "chat" || enSalaVoz ? "flex" : "hidden"
+        } ${mobileTab !== "chat" && enSalaVoz ? "pointer-events-none fixed left-0 top-0 z-0 h-px w-px overflow-hidden opacity-0" : ""}`}
+        aria-hidden={mobileTab !== "chat" && enSalaVoz}
+      >
+        <ComunicacionPanel
+          claseId={claseId}
+          nombre={chatNombre}
+          activoChat={!isLg && mobileTab === "chat"}
+          visible={mobileTab === "chat"}
+          onSalaVozChange={setEnSalaVoz}
+          className="min-h-0 flex-1"
+        />
+      </div>
+
+      {enSalaVoz && mobileTab !== "chat" && (
+        <button
+          type="button"
+          onClick={() => setMobileTab("chat")}
+          className="fixed left-3 right-3 z-50 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-700 px-4 text-sm font-semibold text-white shadow-lg lg:hidden"
+          style={{ bottom: "calc(4.75rem + env(safe-area-inset-bottom))" }}
         >
-          <ChatPanel
-            nombre={chatNombre}
-            activo={!isLg && mobileTab === "chat"}
-            onCambiarNombre={handleCambiarNombreChat}
-            className="min-h-0 flex-1"
-          />
-        </div>
+          <span aria-hidden>🎙️</span>
+          En la sala de voz — toca para volver al chat
+        </button>
       )}
 
       <nav
@@ -316,7 +618,7 @@ export default function Home() {
       >
         <button
           type="button"
-          onClick={() => setMobileTab("pdf")}
+          onClick={irALeccionDelDia}
           className={`flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium transition active:bg-slate-100 ${
             mobileTab === "pdf" ? "text-primary bg-primary/5" : "text-slate-600"
           }`}
@@ -353,11 +655,103 @@ export default function Home() {
         </button>
       </nav>
 
-      {chatNombreListo && !chatNombre && (
-        <ChatNombreModal onConfirm={handleConfirmarNombreChat} />
+      {showAvisoCompartir && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          onClick={() => setShowAvisoCompartir(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-display text-lg font-semibold text-primary">Compartir para ver</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              Para leer comentarios de maestros, alumnos o quien estudie en independiente en esta
+              sala, primero marca <strong>Compartir mis comentarios</strong>. Si no aceptas, no verás
+              los de los demás y ellos no verán los tuyos.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                type="button"
+                className="min-h-11 rounded-xl bg-primary text-sm font-semibold text-white"
+                onClick={() => {
+                  void handleCambiarCompartir(true)
+                  setShowAvisoCompartir(false)
+                  setShowModalOtros(true)
+                }}
+              >
+                Sí, compartir y ver comentarios
+              </button>
+              <button
+                type="button"
+                className="min-h-11 rounded-xl border border-border text-sm font-medium text-slate-600"
+                onClick={() => setShowAvisoCompartir(false)}
+              >
+                Ahora no
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Modal */}
+      {showModalOtros && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          onClick={() => setShowModalOtros(false)}
+        >
+          <div
+            className="relative w-full max-w-lg max-h-[85vh] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-border bg-primary px-5 py-4 text-white">
+              <h2 className="font-display text-lg font-semibold">Comentarios del grupo</h2>
+              <p className="mt-0.5 text-xs text-blue-100/80">
+                Solo quien aceptó compartir · {claseNombre || "esta sala"}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30"
+              onClick={() => setShowModalOtros(false)}
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+            <div className="custom-scroll max-h-[60vh] overflow-y-auto p-5">
+              {!yoCompartoNotas ? (
+                <p className="text-center text-sm text-muted">
+                  Activa &quot;Compartir mis comentarios&quot; para ver los de otros.
+                </p>
+              ) : notasCompartidasOtros.length === 0 ? (
+                <p className="text-center text-sm text-muted">
+                  Aún no hay comentarios compartidos de otros en esta sala, o nadie más aceptó
+                  compartir.
+                </p>
+              ) : (
+                notasCompartidasOtros.map(({ fecha, nota }) => (
+                  <article
+                    key={`o-${fecha}-${nota.autor}`}
+                    className="mb-4 border-b border-border pb-4 last:mb-0"
+                  >
+                    <time className="text-xs font-semibold text-primary">
+                      {formatDateDMY(fecha)}
+                    </time>
+                    {nota.autor && (
+                      <span className="ml-2 text-[10px] font-medium text-slate-500">
+                        · {nota.autor}
+                      </span>
+                    )}
+                    <p className="mt-1 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
+                      {nota.texto}
+                    </p>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
@@ -368,9 +762,9 @@ export default function Home() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-border bg-primary px-5 py-4 text-white">
-              <h2 className="font-display text-lg font-semibold">Todas mis notas</h2>
+              <h2 className="font-display text-lg font-semibold">Mis comentarios</h2>
               <p className="text-xs text-blue-100/80 mt-0.5">
-                {Object.keys(comentariosPorFecha).length} nota(s) guardada(s)
+                {claseNombre ? claseNombre : "Tu sala"}
               </p>
             </div>
             <button
@@ -382,17 +776,28 @@ export default function Home() {
               ×
             </button>
             <div className="custom-scroll max-h-[60vh] overflow-y-auto p-5">
-              {Object.keys(comentariosPorFecha).length === 0 && (
-                <p className="text-center text-sm text-muted">No hay notas guardadas.</p>
+              {Object.keys(misComentarios).length === 0 ? (
+                <p className="text-center text-sm text-muted">Aún no has guardado comentarios.</p>
+              ) : (
+                Object.entries(misComentarios)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([fecha, nota]) => (
+                    <article
+                      key={`m-${fecha}`}
+                      className="mb-4 border-b border-border pb-4 last:mb-0"
+                    >
+                      <time className="text-xs font-semibold text-primary">
+                        {formatDateDMY(fecha)}
+                      </time>
+                      {!yoCompartoNotas && (
+                        <span className="ml-2 text-[10px] text-amber-700">· solo tú lo ves</span>
+                      )}
+                      <p className="mt-1 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
+                        {nota.texto}
+                      </p>
+                    </article>
+                  ))
               )}
-              {Object.entries(comentariosPorFecha)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([fecha, texto]) => (
-                  <article key={fecha} className="mb-4 border-b border-border pb-4 last:mb-0 last:border-0">
-                    <time className="text-xs font-semibold text-primary">{formatDateDMY(fecha)}</time>
-                    <p className="mt-1 text-sm leading-relaxed text-slate-700 whitespace-pre-line">{texto}</p>
-                  </article>
-                ))}
             </div>
           </div>
         </div>

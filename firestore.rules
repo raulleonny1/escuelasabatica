@@ -2,16 +2,48 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Datos legacy (lectura para migrar; escritura permitida por compatibilidad)
     match /comentarios/{fecha} {
       allow read, write: if true;
     }
-
     match /chatMessages/{messageId} {
       allow read, write: if true;
     }
-
     match /chatPresence/{sessionId} {
       allow read, write: if true;
+    }
+    match /gruposEnEstudio/{claseId} {
+      allow read, write: if true;
+    }
+
+    // Por clase: código conocido = acceso al grupo
+    match /clases/{claseId} {
+      allow read, write: if true;
+
+      match /comentariosClase/{fecha} {
+        allow read, write: if true;
+      }
+      match /compartirNotas/{presenceId} {
+        allow read, write: if true;
+      }
+      match /chatMessages/{messageId} {
+        allow read, write: if true;
+      }
+      match /chatPresence/{presenceId} {
+        allow read, write: if true;
+      }
+      match /voicePresence/{presenceId} {
+        allow read, write: if true;
+      }
+      match /sesion/{docId} {
+        allow read, write: if true;
+      }
+      match /asistencia/{fecha} {
+        allow read, write: if true;
+      }
+      match /solicitudesUnion/{presenceId} {
+        allow read, write: if true;
+      }
     }
   }
 }

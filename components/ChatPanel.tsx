@@ -27,6 +27,7 @@ import {
 } from "@/lib/chatNotificaciones"
 
 interface ChatPanelProps {
+  claseId: string
   nombre: string
   activo?: boolean
   onCambiarNombre?: () => void
@@ -34,6 +35,7 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({
+  claseId,
   nombre,
   activo = false,
   onCambiarNombre,
@@ -68,10 +70,10 @@ export default function ChatPanel({
     solicitarPermisoNotificaciones().catch(() => {})
     if (!entradaAnunciadaRef.current) {
       entradaAnunciadaRef.current = true
-      anunciarEntradaChat(nombre, sessionId).catch(() => {})
+      anunciarEntradaChat(claseId, nombre, sessionId).catch(() => {})
     }
-    return iniciarPresenciaEnChat(nombre, sessionId)
-  }, [activo, nombre, sessionId])
+    return iniciarPresenciaEnChat(claseId, nombre, sessionId)
+  }, [activo, claseId, nombre, sessionId])
 
   const procesarMensajesNuevos = useCallback(
     (data: ChatMessage[]) => {
@@ -133,7 +135,7 @@ export default function ChatPanel({
 
     setListo(true)
 
-    const unsubMsg = subscribeChatMessages(
+    const unsubMsg = subscribeChatMessages(claseId,
       (data) => {
         procesarMensajesNuevos(data)
         setMensajes(data)
@@ -142,7 +144,7 @@ export default function ChatPanel({
       () => setError("Sin conexión al chat.")
     )
 
-    const unsubPres = subscribePresenciaCompleta((todos, enChat) => {
+    const unsubPres = subscribePresenciaCompleta(claseId, (todos, enChat) => {
       setConectados(todos)
       setActivosEnChat(enChat)
     }, () => {})
@@ -151,7 +153,7 @@ export default function ChatPanel({
       unsubMsg()
       unsubPres()
     }
-  }, [nombre, sessionId, procesarMensajesNuevos])
+  }, [claseId, nombre, sessionId, procesarMensajesNuevos])
 
   useEffect(() => {
     if (!activo || mensajes.length === 0) return
@@ -170,7 +172,7 @@ export default function ChatPanel({
   function insertarEmoji(emoji: string) {
     setTexto((prev) => prev + emoji)
     inputRef.current?.focus()
-    pulsoActividadEnChat(nombre)
+    pulsoActividadEnChat(claseId, nombre)
   }
 
   async function handleEnviar(e: React.FormEvent) {
@@ -178,9 +180,9 @@ export default function ChatPanel({
     const limpio = texto.trim()
     if (!limpio || enviando) return
     setEnviando(true)
-    pulsoActividadEnChat(nombre)
+    pulsoActividadEnChat(claseId, nombre)
     try {
-      await enviarMensajeChat(nombre, limpio, sessionId)
+      await enviarMensajeChat(claseId, nombre, limpio, sessionId)
       setTexto("")
       setError(null)
     } catch {
@@ -221,7 +223,7 @@ export default function ChatPanel({
       return `${base} ${mencion}`
     })
     inputRef.current?.focus()
-    pulsoActividadEnChat(nombre)
+    pulsoActividadEnChat(claseId, nombre)
   }
 
   return (
@@ -375,7 +377,7 @@ export default function ChatPanel({
             onFocus={() => prepararSonidoChat()}
             onChange={(e) => {
               setTexto(e.target.value)
-              if (e.target.value.trim()) pulsoActividadEnChat(nombre)
+              if (e.target.value.trim()) pulsoActividadEnChat(claseId, nombre)
             }}
             placeholder="Mensaje… Toca un nombre arriba para @avisar"
             maxLength={2000}

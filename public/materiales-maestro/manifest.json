@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "guia-orientacion",
+      "categoria": "Guías",
+      "titulo": "Guía de orientación para el maestro",
+      "descripcion": "Sugerencias para dirigir la clase y el estudio grupal.",
+      "archivo": "/materiales-maestro/guias/guia-orientacion.pdf"
+    },
+    {
+      "id": "plan-clase",
+      "categoria": "Planificación",
+      "titulo": "Plantilla de plan de clase",
+      "descripcion": "Formato para preparar objetivos, preguntas y cierre.",
+      "archivo": "/materiales-maestro/planificacion/plantilla-plan-clase.pdf"
+    },
+    {
+      "id": "recursos-visuales",
+      "categoria": "Recursos",
+      "titulo": "Materiales visuales de apoyo",
+      "descripcion": "Recursos complementarios para presentar en clase.",
+      "archivo": "/materiales-maestro/recursos/materiales-visuales.pdf"
+    }
+  ]
+}

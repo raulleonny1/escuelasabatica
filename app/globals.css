@@ -18,6 +18,40 @@
 html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
+  font-size: 100%;
+}
+
+/* Escala tipográfica global (rem); el PDF no se ve afectado */
+html[data-text-size="1"] {
+  font-size: 112.5%;
+}
+
+html[data-text-size="2"] {
+  font-size: 125%;
+}
+
+html[data-text-size="3"] {
+  font-size: 137.5%;
+}
+
+/* Etiquetas fijas en px que no usan rem */
+html[data-text-size="1"] .text-\[10px\] {
+  font-size: 11px;
+}
+html[data-text-size="1"] .text-\[11px\] {
+  font-size: 12px;
+}
+html[data-text-size="2"] .text-\[10px\] {
+  font-size: 12px;
+}
+html[data-text-size="2"] .text-\[11px\] {
+  font-size: 13px;
+}
+html[data-text-size="3"] .text-\[10px\] {
+  font-size: 13px;
+}
+html[data-text-size="3"] .text-\[11px\] {
+  font-size: 14px;
 }
 
 body {
@@ -53,6 +87,26 @@ body {
 
 .custom-scroll::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Pantalla de acceso / login */
+.acceso-pantalla {
+  background: linear-gradient(145deg, #0f2238 0%, #1e3a5f 42%, #2d5a87 100%);
+}
+
+.acceso-logo-wrap {
+  animation: acceso-logo-in 0.55s ease-out both;
+}
+
+@keyframes acceso-logo-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Reparto 70% / 30% en escritorio (flex-7 no existe en Tailwind) */

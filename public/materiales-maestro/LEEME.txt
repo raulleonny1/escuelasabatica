@@ -1,0 +1,16 @@
+MATERIALES AUXILIARES — SOLO MAESTROS
+=====================================
+
+Coloca aquí los PDF u otros archivos que solo debe ver el maestro.
+
+Estructura sugerida:
+  guias/           → guías del maestro, orientaciones
+  planificacion/   → plantillas, planes de clase
+  recursos/        → apoyos visuales, extras
+
+Edita manifest.json para añadir o quitar entradas.
+Cada entrada necesita:
+  - titulo, descripcion, categoria
+  - archivo: ruta desde public, ej. /materiales-maestro/guias/mi-archivo.pdf
+
+Los alumnos y el modo independiente NO ven esta sección en la app.
