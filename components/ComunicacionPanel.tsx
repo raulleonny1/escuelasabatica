@@ -9,8 +9,6 @@ type TabComunicacion = "texto" | "voz"
 interface ComunicacionPanelProps {
   claseId: string
   nombre: string
-  /** Conectar voz al entrar (maestro/alumno en clase con código) */
-  vozAutomatica?: boolean
   activoChat?: boolean
   visible?: boolean
   onSalaVozChange?: (enSala: boolean) => void
@@ -20,22 +18,14 @@ interface ComunicacionPanelProps {
 export default function ComunicacionPanel({
   claseId,
   nombre,
-  vozAutomatica = false,
   activoChat = false,
   visible = true,
   onSalaVozChange,
   className = "",
 }: ComunicacionPanelProps) {
-  const [tab, setTab] = useState<TabComunicacion>(vozAutomatica ? "voz" : "texto")
-  const [enSalaVoz, setEnSalaVoz] = useState(false)
+  const [tab, setTab] = useState<TabComunicacion>("texto")
 
-  function handleSalaVoz(en: boolean) {
-    setEnSalaVoz(en)
-    onSalaVozChange?.(en)
-  }
-
-  const pestañaVozVisible = visible && tab === "voz"
-  const montarVoz = vozAutomatica || tab === "voz" || enSalaVoz
+  const pestañaVoz = tab === "voz" && visible
 
   return (
     <section
@@ -63,13 +53,6 @@ export default function ComunicacionPanel({
           }`}
         >
           🎙️ Voz grupal
-          {enSalaVoz && tab !== "voz" && (
-            <span
-              className="ml-1 inline-block h-1.5 w-1.5 align-middle rounded-full bg-emerald-500"
-              title="Conectado a la voz"
-              aria-hidden
-            />
-          )}
         </button>
       </div>
 
@@ -86,27 +69,15 @@ export default function ComunicacionPanel({
         />
       </div>
 
-      {montarVoz && (
-        <div
-          className={
-            pestañaVozVisible
-              ? "flex min-h-0 flex-1 flex-col"
-              : vozAutomatica || enSalaVoz
-                ? "pointer-events-none fixed left-0 top-0 z-[-1] h-[min(100dvh,420px)] w-[min(100vw,480px)] max-w-[480px] overflow-hidden opacity-0"
-                : "hidden"
-          }
-          aria-hidden={!pestañaVozVisible}
-        >
-          <SalaVozPanel
-            claseId={claseId}
-            nombre={nombre}
-            vozAutomatica={vozAutomatica}
-            visible={pestañaVozVisible}
-            onSalaVozChange={handleSalaVoz}
-            className="min-h-0 flex-1"
-          />
-        </div>
-      )}
+      <div className={`min-h-0 flex-1 flex flex-col ${tab === "voz" ? "flex" : "hidden"}`}>
+        <SalaVozPanel
+          claseId={claseId}
+          nombre={nombre}
+          activo={pestañaVoz}
+          onSalaVozChange={onSalaVozChange}
+          className="min-h-0 flex-1"
+        />
+      </div>
     </section>
   )
 }

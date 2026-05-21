@@ -35,7 +35,6 @@ import PanelMaestro from "@/components/PanelMaestro"
 import MaterialesMaestro from "@/components/MaterialesMaestro"
 import UnirseAGrupoIndependiente from "@/components/UnirseAGrupoIndependiente"
 import AvisosEntradaClase from "@/components/AvisosEntradaClase"
-import ConexionVozFondo from "@/components/ConexionVozFondo"
 import PdfErrorBoundary from "@/components/PdfErrorBoundary"
 import {
   getFechaDestacadaEnSemana,
@@ -49,7 +48,6 @@ import {
   iniciarPresenciaEnApp,
 } from "@/lib/chat"
 import { desbloquearSonidosEnInteraccion, prepararMicrofonoClase } from "@/lib/audioClase"
-import { cargarScriptJitsi } from "@/lib/salaVoz"
 import { useMediaLg } from "@/hooks/useMediaLg"
 import { CHAT_ABRIR_EVENT, CHAT_NO_LEIDOS_EVENT } from "@/lib/chatNotificaciones"
 import { prepararSonidoChat } from "@/lib/chatNotificaciones"
@@ -146,11 +144,6 @@ export default function Home() {
   useEffect(() => {
     desbloquearSonidosEnInteraccion()
   }, [])
-
-  useEffect(() => {
-    if (!vozClaseActiva) return
-    void cargarScriptJitsi().catch(() => {})
-  }, [vozClaseActiva])
 
   useEffect(() => {
     if (!chatNombre || !claseId) return
@@ -596,11 +589,10 @@ export default function Home() {
           <Biblia agregarVersiculo={agregarVersiculo} />
         </section>
 
-        {isLg && (
+        {isLg && vozClaseActiva && (
           <ComunicacionPanel
             claseId={claseId}
             nombre={chatNombre}
-            vozAutomatica={vozClaseActiva}
             activoChat
             visible
             onSalaVozChange={setEnSalaVoz}
@@ -609,38 +601,17 @@ export default function Home() {
         )}
       </aside>
 
-      {!isLg && mobileTab === "chat" && (
+      {!isLg && mobileTab === "chat" && vozClaseActiva && (
         <div className="flex min-h-0 flex-1 flex-col bg-surface p-3 md:p-4 lg:hidden">
           <ComunicacionPanel
             claseId={claseId}
             nombre={chatNombre}
-            vozAutomatica={vozClaseActiva}
             activoChat
             visible
             onSalaVozChange={setEnSalaVoz}
             className="min-h-0 flex-1"
           />
         </div>
-      )}
-
-      {!isLg && vozClaseActiva && mobileTab !== "chat" && (
-        <ConexionVozFondo
-          claseId={claseId}
-          nombre={chatNombre}
-          onSalaVozChange={setEnSalaVoz}
-        />
-      )}
-
-      {enSalaVoz && mobileTab !== "chat" && (
-        <button
-          type="button"
-          onClick={() => setMobileTab("chat")}
-          className="fixed left-3 right-3 z-50 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-violet-300 bg-violet-700 px-4 text-sm font-semibold text-white shadow-lg lg:hidden"
-          style={{ bottom: "calc(4.75rem + env(safe-area-inset-bottom))" }}
-        >
-          <span aria-hidden>🎙️</span>
-          En la sala de voz — toca para volver al chat
-        </button>
       )}
 
       <nav

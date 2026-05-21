@@ -1,11 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
-import {
-  cargarScriptJitsi,
-  JITSI_DOMAIN,
-  nombreSalaVozJitsi,
-} from "@/lib/salaVoz"
+import { useEffect, useMemo, useState } from "react"
+import { urlSalaVozJitsi } from "@/lib/salaVoz"
 import {
   iniciarHeartbeatVoz,
   subscribeUsuariosEnVoz,
@@ -15,9 +11,8 @@ import {
 interface SalaVozPanelProps {
   claseId: string
   nombre: string
-  /** Entrar a la voz al abrir la clase, sin botón (estilo Zoom) */
-  vozAutomatica?: boolean
-  visible?: boolean
+  /** Pestaña de voz visible y activa */
+  activo?: boolean
   onSalaVozChange?: (enSala: boolean) => void
   className?: string
 }
@@ -25,402 +20,88 @@ interface SalaVozPanelProps {
 export default function SalaVozPanel({
   claseId,
   nombre,
-  vozAutomatica = false,
-  visible = true,
+  activo = false,
   onSalaVozChange,
   className = "",
 }: SalaVozPanelProps) {
-  const contenedorRef = useRef<HTMLDivElement>(null)
-  const apiRef = useRef<JitsiMeetExternalAPI | null>(null)
-  const autoIniciadoRef = useRef(false)
-  const conectadoRef = useRef(false)
-  const canceladoRef = useRef(false)
-  const [enSala, setEnSala] = useState(false)
-  const [conectando, setConectando] = useState(false)
-  const [solicitudUnirse, setSolicitudUnirse] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [enVoz, setEnVoz] = useState<UsuarioEnVoz[]>([])
-  const [micActivo, setMicActivo] = useState(true)
-  const [falloConexion, setFalloConexion] = useState(false)
-  const [jitsiEnPantalla, setJitsiEnPantalla] = useState(false)
+  const [enSala, setEnSala] = useState(false)
 
-  const roomName = nombreSalaVozJitsi(claseId)
-  const montarContenedor = solicitudUnirse || enSala
-  const modoZoom = vozAutomatica
-  const mostrarCargando = (conectando || (solicitudUnirse && !enSala)) && !falloConexion
-
-  const notificarEnSala = useCallback(
-    (valor: boolean) => {
-      setEnSala(valor)
-      onSalaVozChange?.(valor)
-    },
-    [onSalaVozChange]
-  )
+  const urlSala = useMemo(() => urlSalaVozJitsi(claseId, nombre), [claseId, nombre])
 
   useEffect(() => {
     if (!claseId) return
     return subscribeUsuariosEnVoz(claseId, setEnVoz)
   }, [claseId])
 
-  const salirSala = useCallback(() => {
-    if (apiRef.current) {
-      try {
-        apiRef.current.dispose()
-      } catch {
-        // ignore
-      }
-      apiRef.current = null
-    }
-    if (contenedorRef.current) {
-      contenedorRef.current.innerHTML = ""
-    }
-    notificarEnSala(false)
-    setConectando(false)
-    setSolicitudUnirse(false)
-    setMicActivo(true)
-    setFalloConexion(false)
-    setJitsiEnPantalla(false)
-    autoIniciadoRef.current = false
-    conectadoRef.current = false
-  }, [notificarEnSala])
-
   useEffect(() => {
-    return () => {
-      salirSala()
+    if (!activo || !claseId || !nombre.trim()) {
+      setEnSala(false)
+      onSalaVozChange?.(false)
+      return
     }
-  }, [salirSala])
-
-  useEffect(() => {
-    if (!enSala || !claseId || !nombre.trim()) return
+    setEnSala(true)
+    onSalaVozChange?.(true)
     return iniciarHeartbeatVoz(claseId, nombre)
-  }, [enSala, claseId, nombre])
-
-  useEffect(() => {
-    if (!vozAutomatica || !claseId || !nombre.trim()) return
-    if (autoIniciadoRef.current) return
-
-    autoIniciadoRef.current = true
-    setError(null)
-    setFalloConexion(false)
-    setSolicitudUnirse(true)
-
-    void cargarScriptJitsi().catch(() => {})
-  }, [vozAutomatica, claseId, nombre])
-
-  useLayoutEffect(() => {
-    if (!solicitudUnirse || enSala || apiRef.current) return
-    if (!claseId || !nombre.trim()) return
-
-    const timers: number[] = []
-    let observerIframe: MutationObserver | null = null
-    let pollIframe: number | null = null
-
-    canceladoRef.current = false
-    conectadoRef.current = false
-    setJitsiEnPantalla(false)
-
-    function limpiarTimers() {
-      timers.forEach((t) => window.clearTimeout(t))
-      timers.length = 0
-      if (pollIframe) window.clearInterval(pollIframe)
-      observerIframe?.disconnect()
-    }
-
-    function marcarConectado() {
-      if (canceladoRef.current || conectadoRef.current) return
-      conectadoRef.current = true
-      limpiarTimers()
-      setJitsiEnPantalla(true)
-      notificarEnSala(true)
-      setConectando(false)
-      setFalloConexion(false)
-      setError(null)
-      try {
-        apiRef.current?.executeCommand("toggleAudio")
-      } catch {
-        // ignorar
-      }
-    }
-
-    function alDetectarIframe() {
-      setJitsiEnPantalla(true)
-      timers.push(window.setTimeout(() => marcarConectado(), 800))
-    }
-
-    async function esperarContenedor(intentos = 0): Promise<HTMLDivElement> {
-      const nodo = contenedorRef.current
-      if (nodo) return nodo
-      if (intentos > 40) throw new Error("No se pudo preparar la sala. Intenta de nuevo.")
-      await new Promise((r) => window.setTimeout(r, 50))
-      return esperarContenedor(intentos + 1)
-    }
-
-    async function conectar() {
-      setError(null)
-      setConectando(true)
-      setFalloConexion(false)
-
-      try {
-        let timeoutRed: number | null = null
-        const limite = new Promise<never>((_, reject) => {
-          timeoutRed = window.setTimeout(
-            () => reject(new Error("La sala de voz tardó demasiado. Comprueba tu red.")),
-            20000
-          )
-        })
-
-        await Promise.race([cargarScriptJitsi(), limite])
-        if (timeoutRed) window.clearTimeout(timeoutRed)
-        if (canceladoRef.current) return
-
-        const nodo = await esperarContenedor()
-        if (canceladoRef.current) return
-
-        nodo.innerHTML = ""
-
-        const api = new window.JitsiMeetExternalAPI(JITSI_DOMAIN, {
-          roomName,
-          parentNode: nodo,
-          width: "100%",
-          height: "100%",
-          userInfo: { displayName: nombre.trim().slice(0, 32) },
-          configOverwrite: {
-            startWithAudioMuted: true,
-            startWithVideoMuted: true,
-            prejoinPageEnabled: false,
-            enableLobby: false,
-            requireDisplayName: false,
-            disableDeepLinking: true,
-            enableClosePage: false,
-            disableInviteFunctions: true,
-            hideConferenceSubject: true,
-            enableWelcomePage: false,
-            disableThirdPartyRequests: true,
-            subject: "Escuela Sabática — voz grupal",
-          },
-          interfaceConfigOverwrite: {
-            MOBILE_APP_PROMO: false,
-            SHOW_JITSI_WATERMARK: false,
-            SHOW_WATERMARK_FOR_GUESTS: false,
-            DISPLAY_WELCOME_PAGE_CONTENT: false,
-            TOOLBAR_BUTTONS: ["microphone", "hangup", "settings"],
-          },
-        })
-
-        if (canceladoRef.current) {
-          api.dispose()
-          return
-        }
-
-        apiRef.current = api
-
-        const eventos = [
-          "videoConferenceJoined",
-          "participantJoined",
-          "participantRoleChanged",
-          "audioMuteStatusChanged",
-        ]
-        api.addListener("videoConferenceJoined", marcarConectado)
-        api.addListener("participantJoined", (payload: unknown) => {
-          const p = payload as { id?: string }
-          if (p?.id === "local" || p?.id?.includes("local")) marcarConectado()
-        })
-        api.addListener("audioMuteStatusChanged", (payload: unknown) => {
-          const p = payload as { muted?: boolean }
-          if (typeof p?.muted === "boolean") setMicActivo(!p.muted)
-        })
-
-        api.addListener("readyToClose", () => salirSala())
-
-        observerIframe = new MutationObserver(() => {
-          if (nodo.querySelector("iframe")) alDetectarIframe()
-        })
-        observerIframe.observe(nodo, { childList: true, subtree: true })
-
-        pollIframe = window.setInterval(() => {
-          if (nodo.querySelector("iframe")) alDetectarIframe()
-        }, 400)
-
-        timers.push(window.setTimeout(() => marcarConectado(), 2500))
-        timers.push(window.setTimeout(() => marcarConectado(), 4500))
-
-        timers.push(
-          window.setTimeout(() => {
-            if (!conectadoRef.current && !canceladoRef.current) {
-              setFalloConexion(true)
-              setConectando(false)
-              setError("No se pudo conectar. Permite el micrófono y pulsa Reintentar.")
-            }
-          }, 22000)
-        )
-      } catch (e) {
-        if (canceladoRef.current) return
-        limpiarTimers()
-        setConectando(false)
-        setSolicitudUnirse(false)
-        setFalloConexion(true)
-        setError(
-          e instanceof Error
-            ? e.message
-            : "No se pudo conectar. Permite el micrófono y recarga la página."
-        )
-      }
-    }
-
-    void conectar()
-
-    return () => {
-      canceladoRef.current = true
-      limpiarTimers()
-    }
-  }, [solicitudUnirse, enSala, claseId, nombre, roomName, notificarEnSala, salirSala])
-
-  function unirseAVoz() {
-    if (!claseId || !nombre.trim() || enSala || conectando || solicitudUnirse) return
-    setError(null)
-    setFalloConexion(false)
-    autoIniciadoRef.current = true
-    setSolicitudUnirse(true)
-  }
-
-  function reintentarVoz() {
-    salirSala()
-    window.setTimeout(() => unirseAVoz(), 300)
-  }
-
-  function toggleMicrofono() {
-    apiRef.current?.executeCommand("toggleAudio")
-  }
+  }, [activo, claseId, nombre, onSalaVozChange])
 
   const otrosEnVoz = enVoz.filter(
     (u) => u.nombre.trim().toLowerCase() !== nombre.trim().toLowerCase()
   )
 
+  function abrirPantallaCompleta() {
+    window.open(urlSala, "_blank", "noopener,noreferrer")
+  }
+
   return (
-    <div
-      className={`flex min-h-0 flex-col ${className} ${!visible && enSala ? "sr-only absolute h-0 w-0 overflow-hidden opacity-0" : ""}`}
-      aria-hidden={!visible && enSala}
-    >
+    <div className={`flex min-h-0 flex-col ${className}`}>
       <div className="shrink-0 border-b border-border bg-violet-50/80 px-3 py-2.5">
         <p className="text-xs font-semibold uppercase tracking-wider text-violet-900/80">
           Sala de voz grupal
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-slate-600">
-          {modoZoom
-            ? "Al entrar a la clase te conectamos a la voz, como en Zoom. Solo audio (sin cámara)."
-            : "Como una llamada abierta: quien entra escucha y puede hablar. Solo audio (sin cámara)."}
+          Sala Jitsi integrada. Toca el micrófono en la barra negra para hablar. Sin cámara.
         </p>
         {otrosEnVoz.length > 0 ? (
           <p className="mt-1.5 text-[11px] text-violet-800">
-            <span className="font-medium">En la voz ahora:</span>{" "}
+            <span className="font-medium">En la voz:</span>{" "}
             {otrosEnVoz.map((u) => u.nombre).join(", ")}
           </p>
         ) : (
           <p className="mt-1.5 text-[11px] text-slate-500">
-            Nadie más en la voz por ahora — sé el primero en entrar.
+            {enSala ? "Estás en la sala — otros pueden unirse aquí." : "Aún no hay nadie más en la voz."}
           </p>
         )}
       </div>
 
-      {vozAutomatica && falloConexion && !enSala && !conectando && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
-          <p className="max-w-xs text-center text-sm text-red-700">
-            No se pudo conectar a la voz. Revisa que el micrófono esté permitido.
-          </p>
-          <button
-            type="button"
-            onClick={reintentarVoz}
-            className="min-h-11 rounded-xl bg-violet-700 px-5 text-sm font-semibold text-white"
-          >
-            Reintentar voz
-          </button>
-        </div>
-      )}
-
-      {!enSala && !conectando && !vozAutomatica && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
-          <span className="text-4xl" aria-hidden>
-            🎙️
-          </span>
-          <p className="max-w-xs text-center text-sm text-slate-600">
-            Únete a la sala de voz de tu clase. Puedes seguir leyendo el PDF; la voz sigue activa
-            hasta que pulses salir.
-          </p>
-          <button
-            type="button"
-            disabled={!claseId}
-            onClick={unirseAVoz}
-            className="min-h-11 rounded-xl bg-gradient-to-r from-violet-700 to-primary px-6 text-sm font-semibold text-white shadow-md disabled:opacity-50"
-          >
-            Unirme a la voz grupal
-          </button>
-          {error && (
-            <p className="max-w-xs text-center text-xs text-red-600" role="alert">
-              {error}
+      {!activo ? (
+        <p className="p-4 text-center text-sm text-slate-500">
+          Abre la pestaña Voz grupal para entrar a la llamada.
+        </p>
+      ) : (
+        <>
+          <div className="relative min-h-[min(50vh,320px)] flex-1 bg-slate-900">
+            <iframe
+              title="Sala de voz de la clase"
+              src={urlSala}
+              allow="microphone; camera; fullscreen; display-capture; autoplay"
+              className="absolute inset-0 h-full w-full border-0"
+            />
+          </div>
+          <div className="flex shrink-0 flex-wrap gap-2 border-t border-border bg-card p-2">
+            <button
+              type="button"
+              onClick={abrirPantallaCompleta}
+              className="min-h-10 flex-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-900"
+            >
+              Abrir en pantalla completa
+            </button>
+            <p className="w-full text-center text-[10px] text-slate-500">
+              Si no se ve la sala, usa el botón de arriba o permite micrófono en el navegador.
             </p>
-          )}
-        </div>
+          </div>
+        </>
       )}
-
-      {montarContenedor && (
-        <div
-          className={`relative min-h-[200px] flex-1 ${
-            visible ? "" : "pointer-events-none fixed left-0 top-0 z-[-1] h-[360px] w-[min(100vw,480px)] max-w-[480px] overflow-hidden opacity-0"
-          }`}
-          aria-hidden={!visible && !enSala}
-        >
-          <div ref={contenedorRef} className="h-full min-h-[200px] w-full bg-slate-900" />
-          {mostrarCargando && !jitsiEnPantalla && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-white/92 p-4">
-              <span
-                className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"
-                aria-hidden
-              />
-              <p className="text-center text-sm font-medium text-violet-900">
-                Entrando a la voz de la clase…
-              </p>
-              <p className="max-w-xs text-center text-xs text-slate-500">
-                Acepta el micrófono si el navegador lo pide.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {enSala && !visible && (
-        <p className="shrink-0 border-t border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-medium text-emerald-800">
-          Conectado a la voz — puedes seguir en Lección PDF o Biblia
-        </p>
-      )}
-
-      {enSala && visible && (
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-card p-2">
-          <button
-            type="button"
-            onClick={toggleMicrofono}
-            className={`rounded-lg px-3 py-2 text-xs font-medium ${
-              micActivo ? "bg-emerald-100 text-emerald-900" : "bg-red-100 text-red-800"
-            }`}
-          >
-            {micActivo ? "🎤 Micrófono on" : "🔇 Micrófono off"}
-          </button>
-          <button
-            type="button"
-            onClick={salirSala}
-            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white"
-          >
-            Salir de la voz
-          </button>
-          <span className="ml-auto text-[10px] text-slate-500">{enVoz.length} en la sala</span>
-        </div>
-      )}
-
-      {error && (conectando || enSala) && (
-        <p className="px-3 pb-2 text-center text-xs text-red-600" role="alert">
-          {error}
-        </p>
-      )}
-
     </div>
   )
 }
