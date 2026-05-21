@@ -611,7 +611,7 @@ export default function Home() {
           mobileTab === "chat"
             ? "min-h-0 flex-1 flex"
             : vozClaseActiva
-              ? "pointer-events-none fixed left-0 top-0 z-0 h-px w-px overflow-hidden opacity-0"
+              ? "pointer-events-none fixed left-0 top-0 z-[-1] h-[360px] w-[min(100vw,480px)] max-w-[480px] overflow-hidden opacity-0"
               : "hidden"
         }`}
         aria-hidden={mobileTab !== "chat"}
