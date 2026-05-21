@@ -47,7 +47,7 @@ import {
   guardarNombreChat,
   iniciarPresenciaEnApp,
 } from "@/lib/chat"
-import { desbloquearSonidosEnInteraccion, prepararMicrofonoClase } from "@/lib/audioClase"
+import { desbloquearSonidosEnInteraccion } from "@/lib/audioClase"
 import { useMediaLg } from "@/hooks/useMediaLg"
 import { CHAT_ABRIR_EVENT, CHAT_NO_LEIDOS_EVENT } from "@/lib/chatNotificaciones"
 import { prepararSonidoChat } from "@/lib/chatNotificaciones"
@@ -87,7 +87,6 @@ export default function Home() {
   const [sesion, setSesion] = useState<SesionUsuario | null>(null)
   const [sesionListo, setSesionListo] = useState(false)
   const [chatNoLeidos, setChatNoLeidos] = useState(0)
-  const [enSalaVoz, setEnSalaVoz] = useState(false)
   const [sesionActiva, setSesionActiva] = useState<SesionEstudio | null>(null)
   const [iniciandoEstudio, setIniciandoEstudio] = useState(false)
   const [materialMaestroPdf, setMaterialMaestroPdf] = useState<{
@@ -112,7 +111,7 @@ export default function Home() {
   const chatNombre = sesion?.nombre ?? ""
   const modoIndependiente = sesion ? esModoIndependiente(sesion.claseId) : false
   const esMaestro = sesion?.rol === "maestro"
-  const vozClaseActiva = Boolean(sesion && claseId && !modoIndependiente)
+  const chatClaseActiva = Boolean(sesion && claseId && !modoIndependiente)
 
   useEffect(() => {
     const s = leerSesion()
@@ -130,7 +129,6 @@ export default function Home() {
       if (!s) {
         setMaterialMaestroPdf(null)
         setChatNoLeidos(0)
-        setEnSalaVoz(false)
       }
     }
     window.addEventListener("sesion-actualizada", sync)
@@ -299,7 +297,6 @@ export default function Home() {
       guardarSesion(nueva)
       guardarNombreChat(chatNombre)
       prepararSonidoChat()
-      void prepararMicrofonoClase()
       setSesion(nueva)
       setNotasClase({})
       setCargandoClase(true)
@@ -333,9 +330,6 @@ export default function Home() {
   function handleEntrarSesion(nueva: SesionUsuario) {
     guardarNombreChat(nueva.nombre)
     prepararSonidoChat()
-    if (nueva.rol === "maestro" || nueva.rol === "alumno") {
-      void prepararMicrofonoClase()
-    }
     setSesion(nueva)
     setNotasClase({})
     setCargandoClase(true)
@@ -454,7 +448,7 @@ export default function Home() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
-      {vozClaseActiva && (
+      {chatClaseActiva && (
         <AvisosEntradaClase claseId={claseId} nombre={chatNombre} esMaestro={esMaestro} />
       )}
       <div
@@ -589,28 +583,22 @@ export default function Home() {
           <Biblia agregarVersiculo={agregarVersiculo} />
         </section>
 
-        {isLg && vozClaseActiva && (
+        {isLg && chatClaseActiva && (
           <ComunicacionPanel
             claseId={claseId}
             nombre={chatNombre}
-            esMaestro={esMaestro}
             activoChat
-            visible
-            onSalaVozChange={setEnSalaVoz}
             className="hidden lg:flex lg:min-h-[320px] lg:max-h-[480px]"
           />
         )}
       </aside>
 
-      {!isLg && mobileTab === "chat" && vozClaseActiva && (
+      {!isLg && mobileTab === "chat" && chatClaseActiva && (
         <div className="flex min-h-0 flex-1 flex-col bg-surface p-3 md:p-4 lg:hidden">
           <ComunicacionPanel
             claseId={claseId}
             nombre={chatNombre}
-            esMaestro={esMaestro}
             activoChat
-            visible
-            onSalaVozChange={setEnSalaVoz}
             className="min-h-0 flex-1"
           />
         </div>

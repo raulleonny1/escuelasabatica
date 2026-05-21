@@ -20,7 +20,6 @@ import {
 } from "@/lib/enlaceInvitacion"
 import { guardarPerfilMaestro, leerPerfilMaestro } from "@/lib/perfilMaestro"
 import type { SesionUsuario } from "@/lib/sesionUsuario"
-import { prepararMicrofonoClase } from "@/lib/audioClase"
 import { guardarSesion } from "@/lib/sesionUsuario"
 
 type Paso =
@@ -180,9 +179,6 @@ export default function PantallaAcceso({ onEntrar }: PantallaAccesoProps) {
   }
 
   function finalizar(sesion: SesionUsuario) {
-    if (sesion.rol === "maestro" || sesion.rol === "alumno") {
-      void prepararMicrofonoClase()
-    }
     guardarClaseLocal(sesion.claseId, sesion.claseNombre)
     guardarSesion(sesion)
     if (sesion.rol === "maestro") {

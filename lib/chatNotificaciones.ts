@@ -114,7 +114,7 @@ export function notificarEntradaAlumno(nombreAlumno: string) {
 
   try {
     const n = new Notification("Alguien se unió a la clase", {
-      body: `${nombreAlumno.trim()} entró. Ya está en la sala de voz de la clase.`,
+      body: `${nombreAlumno.trim()} entró a la clase.`,
       icon: "/logoes.png",
       tag: "entrada-clase-es",
     })
