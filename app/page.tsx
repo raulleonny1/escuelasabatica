@@ -593,6 +593,7 @@ export default function Home() {
           <ComunicacionPanel
             claseId={claseId}
             nombre={chatNombre}
+            esMaestro={esMaestro}
             activoChat
             visible
             onSalaVozChange={setEnSalaVoz}
@@ -606,6 +607,7 @@ export default function Home() {
           <ComunicacionPanel
             claseId={claseId}
             nombre={chatNombre}
+            esMaestro={esMaestro}
             activoChat
             visible
             onSalaVozChange={setEnSalaVoz}

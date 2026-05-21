@@ -12,22 +12,32 @@ export function nombreSalaVozJitsi(claseId: string): string {
   return base.slice(0, 64) || "ESabaticaGeneral"
 }
 
-/** URL para iframe / pestaña nueva (sin API embebida, más estable en móvil). */
-export function urlSalaVozJitsi(claseId: string, nombre: string): string {
-  const room = nombreSalaVozJitsi(claseId)
+function hashJitsi(nombre: string, esMaestro: boolean): string {
   const display = encodeURIComponent(nombre.trim().slice(0, 32))
-  const hash = [
+  const partes = [
     "config.prejoinPageEnabled=false",
     "config.startWithVideoMuted=true",
     "config.startWithAudioMuted=false",
     "config.disableDeepLinking=true",
     "config.enableWelcomePage=false",
     "config.enableLobby=false",
+    "config.hideLobbyButton=true",
+    "config.requireDisplayName=false",
     "interfaceConfig.MOBILE_APP_PROMO=false",
     "interfaceConfig.SHOW_JITSI_WATERMARK=false",
     "interfaceConfig.DISPLAY_WELCOME_PAGE_CONTENT=false",
+    "interfaceConfig.SHOW_PROMOTIONAL_CLOSE_PAGE=false",
     "interfaceConfig.TOOLBAR_BUTTONS=[\"microphone\",\"hangup\",\"settings\"]",
     `userInfo.displayName="${display}"`,
-  ].join("&")
-  return `https://${JITSI_DOMAIN}/${room}#${hash}`
+  ]
+  if (esMaestro) {
+    partes.push("config.subject=Escuela Sabatica - Maestro")
+  }
+  return partes.join("&")
+}
+
+/** URL de la sala (iframe o pestaña nueva). */
+export function urlSalaVozJitsi(claseId: string, nombre: string, esMaestro = false): string {
+  const room = nombreSalaVozJitsi(claseId)
+  return `https://${JITSI_DOMAIN}/${room}#${hashJitsi(nombre, esMaestro)}`
 }

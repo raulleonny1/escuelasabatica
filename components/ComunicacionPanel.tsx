@@ -9,6 +9,7 @@ type TabComunicacion = "texto" | "voz"
 interface ComunicacionPanelProps {
   claseId: string
   nombre: string
+  esMaestro?: boolean
   activoChat?: boolean
   visible?: boolean
   onSalaVozChange?: (enSala: boolean) => void
@@ -18,6 +19,7 @@ interface ComunicacionPanelProps {
 export default function ComunicacionPanel({
   claseId,
   nombre,
+  esMaestro = false,
   activoChat = false,
   visible = true,
   onSalaVozChange,
@@ -73,6 +75,7 @@ export default function ComunicacionPanel({
         <SalaVozPanel
           claseId={claseId}
           nombre={nombre}
+          esMaestro={esMaestro}
           activo={pestañaVoz}
           onSalaVozChange={onSalaVozChange}
           className="min-h-0 flex-1"
