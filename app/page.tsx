@@ -35,6 +35,7 @@ import PanelMaestro from "@/components/PanelMaestro"
 import MaterialesMaestro from "@/components/MaterialesMaestro"
 import UnirseAGrupoIndependiente from "@/components/UnirseAGrupoIndependiente"
 import AvisosEntradaClase from "@/components/AvisosEntradaClase"
+import ConexionVozFondo from "@/components/ConexionVozFondo"
 import PdfErrorBoundary from "@/components/PdfErrorBoundary"
 import {
   getFechaDestacadaEnSemana,
@@ -595,37 +596,40 @@ export default function Home() {
           <Biblia agregarVersiculo={agregarVersiculo} />
         </section>
 
-        <ComunicacionPanel
-          claseId={claseId}
-          nombre={chatNombre}
-          vozAutomatica={isLg && vozClaseActiva}
-          activoChat={isLg}
-          visible
-          onSalaVozChange={setEnSalaVoz}
-          className="hidden lg:flex lg:min-h-[320px] lg:max-h-[480px]"
-        />
+        {isLg && (
+          <ComunicacionPanel
+            claseId={claseId}
+            nombre={chatNombre}
+            vozAutomatica={vozClaseActiva}
+            activoChat
+            visible
+            onSalaVozChange={setEnSalaVoz}
+            className="hidden lg:flex lg:min-h-[320px] lg:max-h-[480px]"
+          />
+        )}
       </aside>
 
-      <div
-        className={`flex min-h-0 flex-col bg-surface p-3 md:p-4 lg:hidden ${
-          mobileTab === "chat"
-            ? "min-h-0 flex-1 flex"
-            : vozClaseActiva
-              ? "pointer-events-none fixed left-0 top-0 z-[-1] h-[360px] w-[min(100vw,480px)] max-w-[480px] overflow-hidden opacity-0"
-              : "hidden"
-        }`}
-        aria-hidden={mobileTab !== "chat"}
-      >
-        <ComunicacionPanel
+      {!isLg && mobileTab === "chat" && (
+        <div className="flex min-h-0 flex-1 flex-col bg-surface p-3 md:p-4 lg:hidden">
+          <ComunicacionPanel
+            claseId={claseId}
+            nombre={chatNombre}
+            vozAutomatica={vozClaseActiva}
+            activoChat
+            visible
+            onSalaVozChange={setEnSalaVoz}
+            className="min-h-0 flex-1"
+          />
+        </div>
+      )}
+
+      {!isLg && vozClaseActiva && mobileTab !== "chat" && (
+        <ConexionVozFondo
           claseId={claseId}
           nombre={chatNombre}
-          vozAutomatica={!isLg && vozClaseActiva}
-          activoChat={!isLg && mobileTab === "chat"}
-          visible={mobileTab === "chat"}
           onSalaVozChange={setEnSalaVoz}
-          className="min-h-0 flex-1"
         />
-      </div>
+      )}
 
       {enSalaVoz && mobileTab !== "chat" && (
         <button

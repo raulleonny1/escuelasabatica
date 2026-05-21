@@ -1,12 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   cargarScriptJitsi,
   JITSI_DOMAIN,
   nombreSalaVozJitsi,
 } from "@/lib/salaVoz"
-import { liberarConexionVoz, reclamarConexionVoz } from "@/lib/vozConexion"
 import {
   iniciarHeartbeatVoz,
   subscribeUsuariosEnVoz,
@@ -31,7 +30,6 @@ export default function SalaVozPanel({
   onSalaVozChange,
   className = "",
 }: SalaVozPanelProps) {
-  const panelId = useId()
   const contenedorRef = useRef<HTMLDivElement>(null)
   const apiRef = useRef<JitsiMeetExternalAPI | null>(null)
   const autoIniciadoRef = useRef(false)
@@ -43,11 +41,11 @@ export default function SalaVozPanel({
   const [error, setError] = useState<string | null>(null)
   const [enVoz, setEnVoz] = useState<UsuarioEnVoz[]>([])
   const [micActivo, setMicActivo] = useState(true)
-  const [esDuenoConexion, setEsDuenoConexion] = useState(false)
+  const [falloConexion, setFalloConexion] = useState(false)
 
   const roomName = nombreSalaVozJitsi(claseId)
   const montarContenedor = solicitudUnirse || enSala
-  const modoZoom = vozAutomatica && esDuenoConexion
+  const modoZoom = vozAutomatica
 
   const notificarEnSala = useCallback(
     (valor: boolean) => {
@@ -74,15 +72,14 @@ export default function SalaVozPanel({
     if (contenedorRef.current) {
       contenedorRef.current.innerHTML = ""
     }
-    liberarConexionVoz(panelId)
-    setEsDuenoConexion(false)
     notificarEnSala(false)
     setConectando(false)
     setSolicitudUnirse(false)
     setMicActivo(true)
+    setFalloConexion(false)
     autoIniciadoRef.current = false
     conectadoRef.current = false
-  }, [notificarEnSala, panelId])
+  }, [notificarEnSala])
 
   /** Jitsi en contenedor de 1px no termina la conexión en móvil */
   const claseContenedorJitsi = visible
@@ -105,23 +102,17 @@ export default function SalaVozPanel({
   useEffect(() => {
     if (!vozAutomatica || !claseId || !nombre.trim()) return
     if (autoIniciadoRef.current) return
-    if (!reclamarConexionVoz(panelId)) return
 
-    setEsDuenoConexion(true)
     autoIniciadoRef.current = true
     setError(null)
+    setFalloConexion(false)
     setSolicitudUnirse(true)
 
     void cargarScriptJitsi().catch(() => {})
-
-    return () => {
-      liberarConexionVoz(panelId)
-    }
-  }, [vozAutomatica, claseId, nombre, panelId])
+  }, [vozAutomatica, claseId, nombre])
 
   useEffect(() => {
     if (!solicitudUnirse || enSala || apiRef.current) return
-    if (vozAutomatica && !esDuenoConexion) return
     if (!claseId || !nombre.trim()) return
 
     let fallbackTimer: number | null = null
@@ -139,6 +130,7 @@ export default function SalaVozPanel({
       }
       notificarEnSala(true)
       setConectando(false)
+      setFalloConexion(false)
       setError(null)
     }
 
@@ -219,7 +211,7 @@ export default function SalaVozPanel({
           if (!nodo.querySelector("iframe")) return
           window.setTimeout(() => {
             if (!conectadoRef.current) marcarConectado()
-          }, 2500)
+          }, 1500)
         })
         observerIframe.observe(nodo, { childList: true, subtree: true })
 
@@ -227,11 +219,19 @@ export default function SalaVozPanel({
           if (!canceladoRef.current && apiRef.current === api) {
             marcarConectado()
           }
-        }, 9000)
+        }, 5000)
+
+        window.setTimeout(() => {
+          if (!conectadoRef.current && !canceladoRef.current) {
+            setFalloConexion(true)
+            setConectando(false)
+          }
+        }, 14000)
       } catch (e) {
         if (canceladoRef.current) return
         setConectando(false)
         setSolicitudUnirse(false)
+        setFalloConexion(true)
         setError(
           e instanceof Error
             ? e.message
@@ -259,15 +259,19 @@ export default function SalaVozPanel({
     notificarEnSala,
     salirSala,
     vozAutomatica,
-    esDuenoConexion,
   ])
 
   function unirseAVoz() {
     if (!claseId || !nombre.trim() || enSala || conectando || solicitudUnirse) return
-    if (!reclamarConexionVoz(panelId)) return
-    setEsDuenoConexion(true)
     setError(null)
+    setFalloConexion(false)
+    autoIniciadoRef.current = true
     setSolicitudUnirse(true)
+  }
+
+  function reintentarVoz() {
+    salirSala()
+    window.setTimeout(() => unirseAVoz(), 300)
   }
 
   function toggleMicrofono() {
@@ -304,7 +308,22 @@ export default function SalaVozPanel({
         )}
       </div>
 
-      {!enSala && !conectando && !modoZoom && (
+      {vozAutomatica && falloConexion && !enSala && !conectando && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
+          <p className="max-w-xs text-center text-sm text-red-700">
+            No se pudo conectar a la voz. Revisa que el micrófono esté permitido.
+          </p>
+          <button
+            type="button"
+            onClick={reintentarVoz}
+            className="min-h-11 rounded-xl bg-violet-700 px-5 text-sm font-semibold text-white"
+          >
+            Reintentar voz
+          </button>
+        </div>
+      )}
+
+      {!enSala && !conectando && !vozAutomatica && (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-4">
           <span className="text-4xl" aria-hidden>
             🎙️
@@ -337,7 +356,22 @@ export default function SalaVozPanel({
         />
       )}
 
-      {!enSala && conectando && (
+      {vozAutomatica && !enSala && conectando && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-4">
+          <span
+            className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"
+            aria-hidden
+          />
+          <p className="text-center text-sm font-medium text-violet-900">
+            Entrando a la voz de la clase…
+          </p>
+          <p className="max-w-xs text-center text-xs text-slate-500">
+            Acepta el micrófono si el navegador lo pide.
+          </p>
+        </div>
+      )}
+
+      {!vozAutomatica && !enSala && conectando && (
         <div className="flex shrink-0 flex-col items-center gap-2 border-t border-violet-100 bg-violet-50/50 px-3 py-3">
           <span
             className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-violet-600 border-t-transparent"

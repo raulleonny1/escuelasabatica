@@ -91,7 +91,9 @@ export default function ComunicacionPanel({
           className={
             pestañaVozVisible
               ? "flex min-h-0 flex-1 flex-col"
-              : "pointer-events-none fixed left-0 top-0 z-0 h-px w-px overflow-hidden opacity-0"
+              : vozAutomatica || enSalaVoz
+                ? "pointer-events-none fixed left-0 top-0 z-[-1] h-[min(100dvh,420px)] w-[min(100vw,480px)] max-w-[480px] overflow-hidden opacity-0"
+                : "hidden"
           }
           aria-hidden={!pestañaVozVisible}
         >
