@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import AppHeader from "@/components/AppHeader"
+import PizarraOverlay from "@/components/PizarraOverlay"
+import { PizarraProvider } from "@/components/PizarraContext"
 import { SalaAudioProvider } from "@/components/SalaAudioContext"
 import { esModoIndependiente } from "@/lib/clase"
 import { leerSesion, type SesionUsuario } from "@/lib/sesionUsuario"
@@ -22,8 +24,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const claseId = sesion?.claseId ?? ""
   const nombre = sesion?.nombre ?? ""
-  const audioClase =
-    Boolean(sesion && claseId && !esModoIndependiente(claseId))
+  const claseGrupo = Boolean(sesion && claseId && !esModoIndependiente(claseId))
 
   const contenido = (
     <div className="flex h-dvh flex-col overflow-hidden">
@@ -36,10 +37,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
     </div>
   )
 
-  if (audioClase) {
+  if (claseGrupo) {
     return (
       <SalaAudioProvider claseId={claseId} nombre={nombre}>
-        {contenido}
+        <PizarraProvider claseId={claseId}>
+          {contenido}
+          <PizarraOverlay claseId={claseId} />
+        </PizarraProvider>
       </SalaAudioProvider>
     )
   }

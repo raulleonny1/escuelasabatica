@@ -19,6 +19,7 @@ html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
   font-size: 100%;
+  touch-action: manipulation;
 }
 
 /* Escala tipográfica global (rem); el PDF no se ve afectado */
@@ -122,51 +123,39 @@ body {
   }
 }
 
-/* Visor PDF: altura completa del panel */
+/* Visor PDF: altura completa del panel; zoom solo dentro del PDF */
 .pdf-viewer-shell {
   height: 100%;
   min-height: 0;
-}
-
-.pdf-viewer-shell .rpv-default-layout__container {
-  height: 100%;
-  min-height: 0;
-}
-
-@media (min-width: 1024px) {
-  .pdf-viewer-shell,
-  .pdf-viewer-shell .rpv-default-layout__container {
-    min-height: 320px;
-  }
-}
-
-.pdf-viewer-shell .rpv-default-layout__main {
-  flex: 1;
-  min-height: 0;
+  isolation: isolate;
+  contain: layout style;
 }
 
 .pdf-viewer-shell .rpv-core__viewer {
   height: 100%;
   min-height: 400px;
   background: #f1f5f9;
+  touch-action: pan-x pan-y;
 }
 
 .pdf-viewer-shell .rpv-core__inner-pages {
   min-height: 100%;
+  touch-action: pan-x pan-y;
 }
 
 .pdf-viewer-shell .rpv-core__page-layer {
   box-shadow: 0 4px 24px rgba(30, 58, 95, 0.12);
+  transform-origin: top center;
 }
 
 /* Botones y controles táctiles en móvil */
 @media (max-width: 1023px) {
-  .pdf-viewer-shell .rpv-toolbar {
-    flex-wrap: wrap;
-  }
-
   .pdf-viewer-shell .rpv-core__inner-pages {
     -webkit-overflow-scrolling: touch;
+  }
+
+  .pdf-zoom-bar {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
 }
 

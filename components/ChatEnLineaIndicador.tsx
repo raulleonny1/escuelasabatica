@@ -4,9 +4,7 @@ import { useEffect, useState } from "react"
 import { leerSesion } from "@/lib/sesionUsuario"
 import { subscribePresenciaChat, type ChatUsuarioEnLinea } from "@/lib/chat"
 
-type Placement = "mobile" | "desktop"
-
-export default function ChatEnLineaIndicador({ placement }: { placement: Placement }) {
+export default function ChatEnLineaIndicador() {
   const [enLinea, setEnLinea] = useState<ChatUsuarioEnLinea[]>([])
   const [claseId, setClaseId] = useState("")
   const [nombre, setNombre] = useState("")
@@ -41,37 +39,26 @@ export default function ChatEnLineaIndicador({ placement }: { placement: Placeme
   const nombres = otros.map((u) => u.nombre)
   const cantidad = enLinea.length
 
-  const contenido = (
-    <>
-      <p
-        className="flex items-center gap-1.5 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide text-blue-100/90 sm:text-[11px]"
-      >
-        <span
-          className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
-          aria-hidden
-        />
-        {cantidad === 0 ? "Sin conexión" : cantidad === 1 ? "Tú en línea" : `${cantidad} en línea`}
-      </p>
-      {nombres.length > 0 && (
-        <p
-          className="mt-0.5 max-w-[14rem] truncate text-[10px] text-white/95 sm:max-w-xs sm:text-xs"
-          title={nombres.join(", ")}
-        >
-          {nombres.join(" · ")}
-        </p>
-      )}
-    </>
-  )
-
-  if (placement === "mobile") {
-    return <div className="min-w-0 md:hidden">{contenido}</div>
-  }
+  const etiqueta =
+    cantidad === 0 ? "Sin conexión" : cantidad === 1 ? "Tú en línea" : `${cantidad} en línea`
 
   return (
-    <div className="hidden shrink-0 self-center md:block">
-      <div className="w-fit rounded-full border border-white/15 bg-white/10 px-2.5 py-1 backdrop-blur-sm">
-        {contenido}
-      </div>
+    <div
+      className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1.5 backdrop-blur-sm sm:max-w-none"
+      title={nombres.length > 0 ? nombres.join(", ") : undefined}
+    >
+      <span
+        className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
+        aria-hidden
+      />
+      <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-blue-100 sm:text-[11px]">
+        {etiqueta}
+      </span>
+      {nombres.length > 0 && (
+        <span className="hidden max-w-[8rem] truncate text-[10px] text-white/90 lg:inline">
+          · {nombres.join(", ")}
+        </span>
+      )}
     </div>
   )
 }

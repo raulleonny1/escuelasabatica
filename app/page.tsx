@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import Biblia from "@/components/Biblia"
 import dynamic from "next/dynamic"
 import {
@@ -19,24 +19,22 @@ import { marcarGrupoEnEstudio, quitarGrupoEnEstudio } from "@/lib/gruposEnEstudi
 import { guardarSesion, leerSesion, type SesionUsuario } from "@/lib/sesionUsuario"
 import { IR_MENU_PRINCIPAL_EVENT } from "@/lib/navegacion"
 import {
-  ESTUDIO_INICIADO_EVENT,
-  getEstudioDeHoy,
-  iniciarSesionEstudio,
-  subscribeSesionEstudio,
-  type SesionEstudio,
-} from "@/lib/sesionEstudio"
+  publicarGuiaMaestro,
+  subscribeGuiaClase,
+  type GuiaClase,
+} from "@/lib/guiaClase"
 
 import LeccionControls from "@/components/LeccionControls"
 import MobilePdfControls from "@/components/MobilePdfControls"
 import NotasPanel from "@/components/NotasPanel"
 import ComunicacionPanel from "@/components/ComunicacionPanel"
-import IniciarEstudioButton from "@/components/IniciarEstudioButton"
 import PantallaAcceso from "@/components/PantallaAcceso"
 import PanelMaestro from "@/components/PanelMaestro"
 import MaterialesMaestro from "@/components/MaterialesMaestro"
 import UnirseAGrupoIndependiente from "@/components/UnirseAGrupoIndependiente"
 import AvisosEntradaClase from "@/components/AvisosEntradaClase"
 import PdfErrorBoundary from "@/components/PdfErrorBoundary"
+import IndicadorGuiaMaestro from "@/components/IndicadorGuiaMaestro"
 import {
   getFechaDestacadaEnSemana,
   getFechasSemana,
@@ -88,8 +86,9 @@ export default function Home() {
   const [sesion, setSesion] = useState<SesionUsuario | null>(null)
   const [sesionListo, setSesionListo] = useState(false)
   const [chatNoLeidos, setChatNoLeidos] = useState(0)
-  const [sesionActiva, setSesionActiva] = useState<SesionEstudio | null>(null)
-  const [iniciandoEstudio, setIniciandoEstudio] = useState(false)
+  const [guiaMaestro, setGuiaMaestro] = useState<GuiaClase | null>(null)
+  const ultimaGuiaMs = useRef(0)
+  const ultimaFirmaGuia = useRef("")
   const [materialMaestroPdf, setMaterialMaestroPdf] = useState<{
     url: string
     titulo: string
@@ -152,24 +151,66 @@ export default function Home() {
   }, [chatNombre, claseId])
 
   useEffect(() => {
-    if (!claseId) return
-    return subscribeSesionEstudio(claseId, setSesionActiva, () => {})
+    ultimaGuiaMs.current = 0
+    ultimaFirmaGuia.current = ""
+    setGuiaMaestro(null)
   }, [claseId])
 
   useEffect(() => {
-    const onEstudio = (e: Event) => {
-      const det = (e as CustomEvent<{ semana: number; fecha: string }>).detail
-      if (!det?.semana || !det?.fecha) return
-      setSemana(det.semana)
-      setSelectedDate(det.fecha)
-      setTipo("leccion")
+    if (!claseId || esMaestro || modoIndependiente) return
+    return subscribeGuiaClase(claseId, (guia) => {
+      setGuiaMaestro(guia)
+      if (!guia) return
+
+      const firma = `${guia.semana}|${guia.fecha}|${guia.tipo}|${guia.pestana}|${guia.materialUrl ?? ""}`
+      const yaVista =
+        firma === ultimaFirmaGuia.current &&
+        guia.actualizadoMs > 0 &&
+        guia.actualizadoMs <= ultimaGuiaMs.current
+      if (yaVista) return
+
+      ultimaFirmaGuia.current = firma
+      if (guia.actualizadoMs > 0) ultimaGuiaMs.current = guia.actualizadoMs
+
+      setSemana(guia.semana)
+      setSelectedDate(guia.fecha)
+      setTipo(guia.tipo)
       setLeccionJump((n) => n + 1)
-      setMobileTab("pdf")
-      setComentario(misComentariosPorFecha(notasClase, chatNombre)[det.fecha]?.texto ?? "")
-    }
-    window.addEventListener(ESTUDIO_INICIADO_EVENT, onEstudio)
-    return () => window.removeEventListener(ESTUDIO_INICIADO_EVENT, onEstudio)
-  }, [claseId, notasClase, chatNombre])
+      setMobileTab(guia.pestana)
+      if (guia.materialUrl) {
+        setMaterialMaestroPdf({
+          url: guia.materialUrl,
+          titulo: guia.materialTitulo ?? "Material auxiliar",
+        })
+      } else {
+        setMaterialMaestroPdf(null)
+      }
+    })
+  }, [claseId, esMaestro, modoIndependiente])
+
+  useEffect(() => {
+    if (!esMaestro || !claseId || !chatNombre) return
+    const t = window.setTimeout(() => {
+      void publicarGuiaMaestro(claseId, chatNombre, {
+        semana,
+        fecha: selectedDate,
+        tipo,
+        pestana: mobileTab,
+        materialUrl: materialMaestroPdf?.url ?? null,
+        materialTitulo: materialMaestroPdf?.titulo ?? null,
+      })
+    }, 350)
+    return () => window.clearTimeout(t)
+  }, [
+    esMaestro,
+    claseId,
+    chatNombre,
+    semana,
+    selectedDate,
+    tipo,
+    mobileTab,
+    materialMaestroPdf,
+  ])
 
   useEffect(() => {
     const onNoLeidos = (e: Event) => {
@@ -242,6 +283,11 @@ export default function Home() {
     [notasClase, chatNombre]
   )
 
+  useEffect(() => {
+    if (esMaestro || !guiaMaestro?.fecha) return
+    setComentario(misComentarios[guiaMaestro.fecha]?.texto ?? "")
+  }, [esMaestro, guiaMaestro, misComentarios])
+
   const notasCompartidasOtros = listarNotasCompartidasDelGrupo(
     notasClase,
     preferenciasCompartir,
@@ -307,14 +353,18 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!esMaestro || !claseId || !sesionActiva || !chatNombre) return
+    if (!esMaestro || !claseId || !chatNombre) return
+
+    const dias = getFechasSemana(semana)
+    const dia = dias.find((d) => d.fecha === selectedDate)
+    const diaLabel = dia ? `${dia.diaCorto} ${dia.diaNum} ${dia.mesCorto}` : selectedDate
 
     const datos = {
       nombreClase: claseNombre,
       maestroNombre: chatNombre,
-      semana: sesionActiva.semana,
-      fecha: sesionActiva.fecha,
-      diaLabel: sesionActiva.diaLabel,
+      semana,
+      fecha: selectedDate,
+      diaLabel,
     }
 
     void marcarGrupoEnEstudio(claseId, datos)
@@ -326,7 +376,7 @@ export default function Home() {
       window.clearInterval(id)
       void quitarGrupoEnEstudio(claseId)
     }
-  }, [esMaestro, claseId, sesionActiva, claseNombre, chatNombre])
+  }, [esMaestro, claseId, chatNombre, claseNombre, semana, selectedDate])
 
   function handleEntrarSesion(nueva: SesionUsuario) {
     guardarNombreChat(nueva.nombre)
@@ -400,33 +450,6 @@ export default function Home() {
     setMobileTab("pdf")
   }, [])
 
-  const handleIniciarEstudio = useCallback(async () => {
-    const hoy = getEstudioDeHoy()
-    setIniciandoEstudio(true)
-    setSemana(hoy.semana)
-    setSelectedDate(hoy.fecha)
-    irALeccionDelDia()
-    setComentario(misComentarios[hoy.fecha]?.texto ?? "")
-    prepararSonidoChat()
-
-    if (claseId && chatNombre) {
-      try {
-        await iniciarSesionEstudio(claseId, chatNombre, hoy.semana, hoy.fecha, claseNombre)
-        await marcarGrupoEnEstudio(claseId, {
-          nombreClase: claseNombre,
-          maestroNombre: chatNombre,
-          semana: hoy.semana,
-          fecha: hoy.fecha,
-          diaLabel: hoy.diaLabel,
-        })
-      } catch {
-        // seguir aunque falle la nube
-      }
-    }
-
-    setIniciandoEstudio(false)
-  }, [claseId, chatNombre, misComentarios, irALeccionDelDia])
-
   const pdfUrl = `/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`
   const pdfUrlActivo = materialMaestroPdf?.url ?? pdfUrl
   const pdfViewerKey = materialMaestroPdf
@@ -457,19 +480,22 @@ export default function Home() {
           mobileTab === "pdf" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >
-        {esMaestro && materialMaestroPdf && (
+        {!esMaestro && !modoIndependiente && <IndicadorGuiaMaestro guia={guiaMaestro} />}
+        {materialMaestroPdf && (
           <div className="shrink-0 border-b border-amber-300/50 bg-gradient-to-r from-amber-50 to-accent-soft px-3 py-2.5 lg:px-4">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">
-              Material auxiliar (maestro)
+              {esMaestro ? "Material auxiliar (maestro)" : "Material del maestro"}
             </p>
             <p className="text-sm font-medium text-primary">{materialMaestroPdf.titulo}</p>
-            <button
-              type="button"
-              onClick={() => setMaterialMaestroPdf(null)}
-              className="mt-1.5 text-xs font-medium text-primary underline"
-            >
-              ← Volver a la lección del trimestre
-            </button>
+            {esMaestro && (
+              <button
+                type="button"
+                onClick={() => setMaterialMaestroPdf(null)}
+                className="mt-1.5 text-xs font-medium text-primary underline"
+              >
+                ← Volver a la lección del trimestre
+              </button>
+            )}
           </div>
         )}
         {BibliaPasaje && (
@@ -489,13 +515,6 @@ export default function Home() {
         )}
         <div className="relative min-h-0 flex-1 w-full">
           <MobilePdfControls scrollKey={pdfViewerKey}>
-            {esMaestro && (
-              <IniciarEstudioButton
-                onIniciar={() => void handleIniciarEstudio()}
-                cargando={iniciandoEstudio}
-                sesionActiva={sesionActiva}
-              />
-            )}
             <LeccionControls
               semana={semana}
               setSemana={setSemana}
@@ -520,16 +539,6 @@ export default function Home() {
           mobileTab === "estudio" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >
-        {esMaestro && (
-          <div className="hidden lg:block">
-            <IniciarEstudioButton
-              onIniciar={() => void handleIniciarEstudio()}
-              cargando={iniciandoEstudio}
-              sesionActiva={sesionActiva}
-            />
-          </div>
-        )}
-
         <div className="hidden lg:block">
           <LeccionControls
             semana={semana}
