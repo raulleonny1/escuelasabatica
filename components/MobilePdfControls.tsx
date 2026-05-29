@@ -4,67 +4,105 @@ import { useEffect, useRef, useState, type ReactNode } from "react"
 
 interface MobilePdfControlsProps {
   children: ReactNode
-  /** Cambia cuando se recarga el PDF para volver a enlazar el scroll */
   scrollKey?: string
 }
 
+const UMBRAL_OCULTAR = 56
+const UMBRAL_MOSTRAR = 28
+const TOPE_VISIBLE = 24
+const PAUSA_MS = 280
+
 export default function MobilePdfControls({ children, scrollKey }: MobilePdfControlsProps) {
   const [oculto, setOculto] = useState(false)
+  const ocultoRef = useRef(false)
   const lastY = useRef(0)
+  const accDelta = useRef(0)
+  const lastToggle = useRef(0)
 
   useEffect(() => {
+    ocultoRef.current = false
     setOculto(false)
     lastY.current = 0
+    accDelta.current = 0
+    lastToggle.current = 0
 
     let scrollEl: HTMLElement | null = null
-    let poll: ReturnType<typeof setInterval> | undefined
+    let raf = 0
+
+    const mostrar = () => {
+      if (!ocultoRef.current) return
+      ocultoRef.current = false
+      setOculto(false)
+      lastToggle.current = Date.now()
+      accDelta.current = 0
+    }
+
+    const ocultar = () => {
+      if (ocultoRef.current) return
+      ocultoRef.current = true
+      setOculto(true)
+      lastToggle.current = Date.now()
+      accDelta.current = 0
+    }
 
     const onScroll = () => {
       if (!scrollEl) return
-      const y = scrollEl.scrollTop
-      if (y <= 12) {
-        setOculto(false)
-      } else if (y > lastY.current + 6) {
-        setOculto(true)
-      } else if (y < lastY.current - 6) {
-        setOculto(false)
-      }
-      lastY.current = y
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        if (!scrollEl) return
+        const y = scrollEl.scrollTop
+        const dy = y - lastY.current
+        lastY.current = y
+
+        if (y <= TOPE_VISIBLE) {
+          mostrar()
+          return
+        }
+
+        accDelta.current += dy
+        if (Date.now() - lastToggle.current < PAUSA_MS) return
+
+        if (accDelta.current >= UMBRAL_OCULTAR) ocultar()
+        else if (accDelta.current <= -UMBRAL_MOSTRAR) mostrar()
+      })
     }
 
-    const bind = () => {
-      const el = document.querySelector(
-        ".layout-pdf-panel .rpv-core__inner-pages"
-      ) as HTMLElement | null
-      if (!el || el === scrollEl) return
+    const bind = (el: HTMLElement) => {
+      if (scrollEl === el) return
       scrollEl?.removeEventListener("scroll", onScroll)
       scrollEl = el
       lastY.current = el.scrollTop
       el.addEventListener("scroll", onScroll, { passive: true })
-      if (poll) {
-        clearInterval(poll)
-        poll = undefined
-      }
     }
 
-    bind()
-    poll = setInterval(bind, 200)
+    const panel = document.querySelector(".layout-pdf-panel")
+    const tryBind = () => {
+      const el = document.querySelector(
+        ".layout-pdf-panel .rpv-core__inner-pages"
+      ) as HTMLElement | null
+      if (el) bind(el)
+    }
+
+    tryBind()
+    const observer = panel
+      ? new MutationObserver(tryBind)
+      : null
+    observer?.observe(panel!, { childList: true, subtree: true })
 
     return () => {
-      if (poll) clearInterval(poll)
+      cancelAnimationFrame(raf)
+      observer?.disconnect()
       scrollEl?.removeEventListener("scroll", onScroll)
     }
   }, [scrollKey])
 
   return (
     <div
-      className={`grid shrink-0 transition-[grid-template-rows] duration-300 ease-out lg:hidden ${
-        oculto ? "grid-rows-[0fr]" : "grid-rows-[1fr]"
+      className={`absolute inset-x-0 top-0 z-20 border-b border-border bg-card shadow-sm transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none lg:hidden ${
+        oculto ? "-translate-y-full pointer-events-none" : "translate-y-0"
       }`}
     >
-      <div className="overflow-hidden">
-        <div className="space-y-2 border-b border-border bg-card p-2">{children}</div>
-      </div>
+      <div className="space-y-2 p-2">{children}</div>
     </div>
   )
 }

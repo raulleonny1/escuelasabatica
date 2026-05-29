@@ -457,22 +457,6 @@ export default function Home() {
           mobileTab === "pdf" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >
-        <MobilePdfControls scrollKey={pdfViewerKey}>
-          {esMaestro && (
-            <IniciarEstudioButton
-              onIniciar={() => void handleIniciarEstudio()}
-              cargando={iniciandoEstudio}
-              sesionActiva={sesionActiva}
-            />
-          )}
-          <LeccionControls
-            semana={semana}
-            setSemana={setSemana}
-            tipo={tipo}
-            setTipo={setTipo}
-            onLeccionClick={irALeccionDelDia}
-          />
-        </MobilePdfControls>
         {esMaestro && materialMaestroPdf && (
           <div className="shrink-0 border-b border-amber-300/50 bg-gradient-to-r from-amber-50 to-accent-soft px-3 py-2.5 lg:px-4">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">
@@ -504,6 +488,22 @@ export default function Home() {
           </div>
         )}
         <div className="relative min-h-0 flex-1 w-full">
+          <MobilePdfControls scrollKey={pdfViewerKey}>
+            {esMaestro && (
+              <IniciarEstudioButton
+                onIniciar={() => void handleIniciarEstudio()}
+                cargando={iniciandoEstudio}
+                sesionActiva={sesionActiva}
+              />
+            )}
+            <LeccionControls
+              semana={semana}
+              setSemana={setSemana}
+              tipo={tipo}
+              setTipo={setTipo}
+              onLeccionClick={irALeccionDelDia}
+            />
+          </MobilePdfControls>
           <PdfErrorBoundary url={pdfUrlActivo}>
             <PdfViewer
               key={pdfViewerKey}
