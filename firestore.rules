@@ -35,6 +35,9 @@ service cloud.firestore {
       match /voicePresence/{presenceId} {
         allow read, write: if true;
       }
+      match /voiceSignals/{signalId} {
+        allow read, write: if true;
+      }
       match /sesion/{docId} {
         allow read, write: if true;
       }

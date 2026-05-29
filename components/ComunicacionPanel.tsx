@@ -1,6 +1,7 @@
 "use client"
 
 import ChatPanel from "@/components/ChatPanel"
+import SalaAudioPanel from "@/components/SalaAudioPanel"
 
 interface ComunicacionPanelProps {
   claseId: string
@@ -10,7 +11,7 @@ interface ComunicacionPanelProps {
   className?: string
 }
 
-/** Chat grupal de la clase (sin llamada de voz; Jitsi eliminado por inestabilidad). */
+/** Chat grupal + sala de audio integrada (WebRTC, sin Jitsi ni ventanas externas). */
 export default function ComunicacionPanel({
   claseId,
   nombre,
@@ -21,11 +22,14 @@ export default function ComunicacionPanel({
   if (!visible) return null
 
   return (
-    <ChatPanel
-      claseId={claseId}
-      nombre={nombre}
-      activo={activoChat}
-      className={`rounded-xl border border-border bg-card shadow-sm ${className}`}
-    />
+    <div className={`flex min-h-0 flex-1 flex-col gap-3 ${className}`}>
+      <SalaAudioPanel />
+      <ChatPanel
+        claseId={claseId}
+        nombre={nombre}
+        activo={activoChat}
+        className="min-h-0 flex-1 rounded-xl border border-border bg-card shadow-sm"
+      />
+    </div>
   )
 }
