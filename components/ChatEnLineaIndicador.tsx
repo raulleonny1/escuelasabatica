@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { leerSesion } from "@/lib/sesionUsuario"
 import { subscribePresenciaChat, type ChatUsuarioEnLinea } from "@/lib/chat"
 
-export default function ChatEnLineaIndicador() {
+export default function ChatEnLineaIndicador({ compacto = false }: { compacto?: boolean }) {
   const [enLinea, setEnLinea] = useState<ChatUsuarioEnLinea[]>([])
   const [claseId, setClaseId] = useState("")
   const [nombre, setNombre] = useState("")
@@ -44,17 +44,19 @@ export default function ChatEnLineaIndicador() {
 
   return (
     <div
-      className="inline-flex max-w-[11rem] items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1.5 backdrop-blur-sm sm:max-w-none"
+      className={`inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 backdrop-blur-sm ${
+        compacto ? "max-w-[5.5rem] px-1.5 py-1" : "max-w-[11rem] px-2.5 py-1.5 sm:max-w-none"
+      }`}
       title={nombres.length > 0 ? nombres.join(", ") : undefined}
     >
       <span
         className="h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"
         aria-hidden
       />
-      <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-blue-100 sm:text-[11px]">
-        {etiqueta}
+      <span className="truncate text-[10px] font-semibold uppercase tracking-wide text-blue-100">
+        {compacto ? (cantidad <= 1 ? "En línea" : `${cantidad}`) : etiqueta}
       </span>
-      {nombres.length > 0 && (
+      {!compacto && nombres.length > 0 && (
         <span className="hidden max-w-[8rem] truncate text-[10px] text-white/90 lg:inline">
           · {nombres.join(", ")}
         </span>

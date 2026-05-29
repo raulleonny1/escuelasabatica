@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useLecturaUiOptional } from "@/components/LecturaUiContext"
 
 interface MobilePdfControlsProps {
   children: ReactNode
@@ -14,6 +15,7 @@ const PAUSA_MS = 280
 
 export default function MobilePdfControls({ children, scrollKey }: MobilePdfControlsProps) {
   const [oculto, setOculto] = useState(false)
+  const lecturaUi = useLecturaUiOptional()
   const ocultoRef = useRef(false)
   const lastY = useRef(0)
   const accDelta = useRef(0)
@@ -33,6 +35,7 @@ export default function MobilePdfControls({ children, scrollKey }: MobilePdfCont
       if (!ocultoRef.current) return
       ocultoRef.current = false
       setOculto(false)
+      lecturaUi?.setHeaderOculto(false)
       lastToggle.current = Date.now()
       accDelta.current = 0
     }
@@ -41,6 +44,7 @@ export default function MobilePdfControls({ children, scrollKey }: MobilePdfCont
       if (ocultoRef.current) return
       ocultoRef.current = true
       setOculto(true)
+      lecturaUi?.setHeaderOculto(true)
       lastToggle.current = Date.now()
       accDelta.current = 0
     }
@@ -93,8 +97,9 @@ export default function MobilePdfControls({ children, scrollKey }: MobilePdfCont
       cancelAnimationFrame(raf)
       observer?.disconnect()
       scrollEl?.removeEventListener("scroll", onScroll)
+      lecturaUi?.setHeaderOculto(false)
     }
-  }, [scrollKey])
+  }, [scrollKey, lecturaUi])
 
   return (
     <div

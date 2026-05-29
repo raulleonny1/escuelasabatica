@@ -471,7 +471,7 @@ export default function Home() {
   }
 
   const vistaPrincipal = (
-    <div className="flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
+    <div className="vista-principal-movil flex h-full min-h-0 w-full flex-col pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex-row lg:pb-0">
       {chatClaseActiva && (
         <AvisosEntradaClase claseId={claseId} nombre={chatNombre} esMaestro={esMaestro} />
       )}
@@ -615,7 +615,7 @@ export default function Home() {
       )}
 
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-border bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.08)] lg:hidden"
+        className="mobile-bottom-nav fixed bottom-0 left-0 right-0 z-40 flex border-t border-border bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.08)] transition-transform duration-200 ease-out lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
         aria-label="Navegación principal"
       >

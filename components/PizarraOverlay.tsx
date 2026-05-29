@@ -9,17 +9,23 @@ import {
   normalizarPunto,
   ptsAString,
   ptsDesdeString,
+  resolverTrazoConGesto,
   subscribeTrazosPizarra,
   type HerramientaPizarra,
+  type TipoTrazo,
   type TrazoPizarra,
 } from "@/lib/pizarraClase"
 
 const COLORES = ["#1e293b", "#dc2626", "#2563eb", "#16a34a"] as const
 const GROSORES = [2, 4, 7] as const
 
-function dibujarTrazo(
+function escalaGrosor(grosor: number, w: number) {
+  return grosor * (w / 1000)
+}
+
+function dibujarTrazoLibre(
   ctx: CanvasRenderingContext2D,
-  trazo: TrazoPizarra,
+  trazo: Pick<TrazoPizarra, "pts" | "color" | "grosor" | "herramienta">,
   w: number,
   h: number,
   dpr: number
@@ -31,7 +37,7 @@ function dibujarTrazo(
   ctx.scale(dpr, dpr)
   ctx.lineCap = "round"
   ctx.lineJoin = "round"
-  ctx.lineWidth = trazo.grosor * (w / 1000)
+  ctx.lineWidth = escalaGrosor(trazo.grosor, w)
 
   if (trazo.herramienta === "borrador") {
     ctx.globalCompositeOperation = "destination-out"
@@ -52,6 +58,98 @@ function dibujarTrazo(
   ctx.restore()
 }
 
+function dibujarSubrayado(
+  ctx: CanvasRenderingContext2D,
+  trazo: Pick<TrazoPizarra, "pts" | "color" | "grosor">,
+  w: number,
+  h: number,
+  dpr: number
+) {
+  const pts = ptsDesdeString(trazo.pts)
+  if (pts.length < 2) return
+
+  ctx.save()
+  ctx.scale(dpr, dpr)
+  ctx.globalCompositeOperation = "source-over"
+  ctx.strokeStyle = trazo.color
+  ctx.lineCap = "round"
+  ctx.lineWidth = escalaGrosor(trazo.grosor, w) * 1.8
+
+  const a = desnormalizarPunto(pts[0].x, pts[0].y, w, h)
+  const b = desnormalizarPunto(pts[1].x, pts[1].y, w, h)
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.lineTo(b.x, b.y)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function dibujarCirculo(
+  ctx: CanvasRenderingContext2D,
+  trazo: Pick<TrazoPizarra, "pts" | "color" | "grosor">,
+  w: number,
+  h: number,
+  dpr: number
+) {
+  const pts = ptsDesdeString(trazo.pts)
+  if (pts.length < 2) return
+
+  const a = desnormalizarPunto(pts[0].x, pts[0].y, w, h)
+  const b = desnormalizarPunto(pts[1].x, pts[1].y, w, h)
+  const cx = (a.x + b.x) / 2
+  const cy = (a.y + b.y) / 2
+  const rx = Math.abs(b.x - a.x) / 2
+  const ry = Math.abs(b.y - a.y) / 2
+  if (rx < 2 || ry < 2) return
+
+  ctx.save()
+  ctx.scale(dpr, dpr)
+  ctx.globalCompositeOperation = "source-over"
+  ctx.strokeStyle = trazo.color
+  ctx.lineWidth = escalaGrosor(trazo.grosor, w)
+  ctx.beginPath()
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
+}
+
+function dibujarTrazo(
+  ctx: CanvasRenderingContext2D,
+  trazo: TrazoPizarra,
+  w: number,
+  h: number,
+  dpr: number
+) {
+  if (trazo.herramienta === "borrador" || trazo.tipo === "trazo") {
+    dibujarTrazoLibre(ctx, trazo, w, h, dpr)
+    return
+  }
+  if (trazo.tipo === "subrayado") {
+    dibujarSubrayado(ctx, trazo, w, h, dpr)
+    return
+  }
+  if (trazo.tipo === "circulo") {
+    dibujarCirculo(ctx, trazo, w, h, dpr)
+  }
+}
+
+function trazoPreviewDesdeGestos(
+  pts: { x: number; y: number }[],
+  herramienta: HerramientaPizarra,
+  color: string,
+  grosor: number
+): Pick<TrazoPizarra, "pts" | "color" | "grosor" | "herramienta" | "tipo"> | null {
+  if (pts.length < 2) return null
+  const res = resolverTrazoConGesto(pts, herramienta)
+  return {
+    pts: res.pts,
+    color,
+    grosor,
+    herramienta: herramienta === "borrador" ? "borrador" : "lapiz",
+    tipo: res.tipo,
+  }
+}
+
 export default function PizarraOverlay({ claseId }: { claseId: string }) {
   const pizarra = usePizarraOptional()
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -61,6 +159,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
   const pintando = useRef(false)
   const pointerIdActivo = useRef<number | null>(null)
   const ultimoLimpiar = useRef(0)
+  const paginaRef = useRef(0)
 
   const [color, setColor] = useState<string>(COLORES[0])
   const [grosor, setGrosor] = useState<number>(GROSORES[1])
@@ -68,6 +167,10 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
   const esMaestro = pizarra?.esMaestro ?? false
   const abierta = pizarra?.abierta ?? false
+  const paginaActual = pizarra?.paginaActual ?? 0
+  const totalPaginas = pizarra?.totalPaginas ?? 1
+
+  paginaRef.current = paginaActual
 
   const redibujar = useCallback(() => {
     const canvas = canvasRef.current
@@ -97,20 +200,26 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
     }
 
     if (trazoActivo.current.length >= 2) {
-      dibujarTrazo(
-        ctx,
-        {
-          id: "activo",
-          pts: ptsAString(trazoActivo.current),
-          color,
-          grosor,
-          herramienta,
-          orden: 0,
-        },
-        w,
-        h,
-        dpr
+      const preview = trazoPreviewDesdeGestos(
+        trazoActivo.current,
+        herramienta,
+        color,
+        herramienta === "borrador" ? grosor * 2.5 : grosor
       )
+      if (preview) {
+        dibujarTrazo(
+          ctx,
+          {
+            id: "activo",
+            orden: 0,
+            pagina: paginaRef.current,
+            ...preview,
+          },
+          w,
+          h,
+          dpr
+        )
+      }
     }
   }, [color, grosor, herramienta])
 
@@ -125,11 +234,13 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
   useEffect(() => {
     if (!claseId || !abierta) return
-    return subscribeTrazosPizarra(claseId, (trazos) => {
+    trazosRef.current = []
+    trazoActivo.current = []
+    return subscribeTrazosPizarra(claseId, paginaActual, (trazos) => {
       trazosRef.current = trazos
       redibujar()
     })
-  }, [claseId, abierta, redibujar])
+  }, [claseId, abierta, paginaActual, redibujar])
 
   useEffect(() => {
     if (pizarra?.estado?.limpiarEn && pizarra.estado.limpiarEn > ultimoLimpiar.current) {
@@ -196,11 +307,15 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
     trazoActivo.current = []
 
     if (pts.length >= 2 && claseId) {
+      const herramientaGuardar = herramienta
+      const res = resolverTrazoConGesto(pts, herramientaGuardar)
       const trazo = {
-        pts: ptsAString(pts),
-        color: herramienta === "borrador" ? "#000000" : color,
-        grosor: herramienta === "borrador" ? grosor * 2.5 : grosor,
-        herramienta,
+        pts: res.pts,
+        color: herramientaGuardar === "borrador" ? "#000000" : color,
+        grosor: herramientaGuardar === "borrador" ? grosor * 2.5 : grosor,
+        herramienta: herramientaGuardar === "borrador" ? ("borrador" as const) : ("lapiz" as const),
+        tipo: res.tipo as TipoTrazo,
+        pagina: paginaActual,
       }
       trazosRef.current = [
         ...trazosRef.current,
@@ -229,6 +344,40 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
           📝 Pizarra {esMaestro ? "" : `· ${etiquetaMaestro}`}
         </p>
 
+        <div className="flex items-center gap-1 rounded-lg bg-white/10 p-1">
+          <button
+            type="button"
+            onClick={() => void pizarra.paginaAnterior()}
+            disabled={!esMaestro || paginaActual <= 0}
+            className="rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-40"
+            aria-label="Página anterior"
+          >
+            ←
+          </button>
+          <span className="min-w-[4.5rem] text-center text-[11px] font-medium tabular-nums">
+            {paginaActual + 1} / {totalPaginas}
+          </span>
+          <button
+            type="button"
+            onClick={() => void pizarra.paginaSiguiente()}
+            disabled={!esMaestro || paginaActual >= totalPaginas - 1}
+            className="rounded-md px-2 py-1 text-xs font-semibold disabled:opacity-40"
+            aria-label="Página siguiente"
+          >
+            →
+          </button>
+          {esMaestro && (
+            <button
+              type="button"
+              onClick={() => void pizarra.crearPagina()}
+              className="rounded-md bg-accent px-2 py-1 text-[11px] font-semibold text-primary-dark"
+              title="Nueva pantalla"
+            >
+              + Nueva
+            </button>
+          )}
+        </div>
+
         {esMaestro && (
           <>
             <div className="flex items-center gap-1 rounded-lg bg-white/10 p-1">
@@ -241,7 +390,10 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
                     setColor(c)
                   }}
                   className={`h-7 w-7 rounded-md border-2 ${
-                    herramienta === "lapiz" && color === c
+                    herramienta !== "borrador" &&
+                    herramienta !== "subrayar" &&
+                    herramienta !== "encerrar" &&
+                    color === c
                       ? "border-accent scale-110"
                       : "border-white/30"
                   }`}
@@ -272,6 +424,38 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
             <button
               type="button"
+              onClick={() => setHerramienta("lapiz")}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                herramienta === "lapiz" ? "bg-accent text-primary-dark" : "bg-white/10"
+              }`}
+            >
+              Lápiz
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setHerramienta("subrayar")}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                herramienta === "subrayar" ? "bg-accent text-primary-dark" : "bg-white/10"
+              }`}
+              title="Dibuja una línea horizontal bajo el texto"
+            >
+              Subrayar
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setHerramienta("encerrar")}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                herramienta === "encerrar" ? "bg-accent text-primary-dark" : "bg-white/10"
+              }`}
+              title="Dibuja un círculo alrededor del contenido"
+            >
+              Encerrar
+            </button>
+
+            <button
+              type="button"
               onClick={() => setHerramienta("borrador")}
               className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
                 herramienta === "borrador" ? "bg-accent text-primary-dark" : "bg-white/10"
@@ -284,6 +468,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
               type="button"
               onClick={() => void pizarra.limpiarTablero()}
               className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-semibold"
+              title="Borra solo la pantalla actual"
             >
               Limpiar
             </button>
@@ -313,7 +498,18 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         />
+        {!esMaestro && totalPaginas > 1 && (
+          <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-800/75 px-3 py-1 text-[11px] text-white">
+            Pantalla {paginaActual + 1} de {totalPaginas}
+          </div>
+        )}
       </div>
+
+      {esMaestro && herramienta === "lapiz" && (
+        <p className="shrink-0 bg-primary/90 px-3 py-1.5 text-center text-[10px] text-blue-100/90">
+          Con el lápiz: trazo horizontal → subraya · trazo cerrado → encierra en círculo
+        </p>
+      )}
 
       {!esMaestro && sesion?.rol === "alumno" && (
         <p className="shrink-0 bg-primary/95 px-3 py-2 text-center text-[11px] text-blue-100">

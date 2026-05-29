@@ -175,3 +175,60 @@ input[type="date"] {
     box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
   }
 }
+
+/* Modo lectura: al bajar en el PDF o con pizarra abierta */
+html[data-lectura="1"] .layout-guia-maestro {
+  display: none;
+}
+
+html[data-lectura="1"] .mobile-bottom-nav {
+  transform: translateY(100%);
+  pointer-events: none;
+}
+
+html[data-lectura="1"] .vista-principal-movil {
+  padding-bottom: 0 !important;
+}
+
+html[data-lectura="1"] .pdf-zoom-bar {
+  bottom: calc(0.5rem + env(safe-area-inset-bottom));
+}
+
+/* Móvil horizontal: más espacio para leer */
+@media (max-width: 1023px) and (orientation: landscape) and (max-height: 520px) {
+  .app-main {
+    padding: 0.25rem !important;
+  }
+
+  .app-main-inner {
+    border-radius: 0.5rem;
+  }
+
+  .vista-principal-movil {
+    padding-bottom: 2.75rem !important;
+  }
+
+  .mobile-bottom-nav button {
+    min-height: 2.5rem;
+    gap: 0;
+  }
+
+  .mobile-bottom-nav button span.text-lg {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .mobile-bottom-nav button {
+    font-size: 10px;
+  }
+
+  .layout-guia-maestro {
+    display: none;
+  }
+
+  .pdf-zoom-bar {
+    bottom: calc(0.35rem + env(safe-area-inset-bottom));
+    transform: scale(0.92);
+    transform-origin: bottom center;
+  }
+}

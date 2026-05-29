@@ -2,11 +2,50 @@
 
 import { useEffect, useState, type ReactNode } from "react"
 import AppHeader from "@/components/AppHeader"
+import { LecturaUiProvider, useLecturaUiOptional } from "@/components/LecturaUiContext"
 import PizarraOverlay from "@/components/PizarraOverlay"
-import { PizarraProvider } from "@/components/PizarraContext"
+import { PizarraProvider, usePizarraOptional } from "@/components/PizarraContext"
 import { SalaAudioProvider } from "@/components/SalaAudioContext"
 import { esModoIndependiente } from "@/lib/clase"
 import { leerSesion, type SesionUsuario } from "@/lib/sesionUsuario"
+
+function CabeceraEnvolvente() {
+  const lectura = useLecturaUiOptional()
+  const pizarra = usePizarraOptional()
+  const oculta = Boolean(lectura?.headerOculto || pizarra?.abierta)
+
+  useEffect(() => {
+    document.documentElement.dataset.lectura = oculta ? "1" : "0"
+    return () => {
+      document.documentElement.dataset.lectura = "0"
+    }
+  }, [oculta])
+
+  return (
+    <div
+      className={`app-header-shell shrink-0 overflow-hidden transition-[max-height,transform,opacity] duration-200 ease-out motion-reduce:transition-none lg:!max-h-none lg:!translate-y-0 lg:!opacity-100 ${
+        oculta
+          ? "pointer-events-none max-h-0 -translate-y-2 opacity-0"
+          : "max-h-[min(70vh,520px)] translate-y-0 opacity-100"
+      }`}
+    >
+      <AppHeader />
+    </div>
+  )
+}
+
+function ShellInterior({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-dvh flex-col overflow-hidden">
+      <CabeceraEnvolvente />
+      <main className="app-main flex min-h-0 flex-1 overflow-hidden bg-surface p-2 md:p-4">
+        <div className="app-main-inner mx-auto flex h-full min-h-0 w-full max-w-[1800px] overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+          {children}
+        </div>
+      </main>
+    </div>
+  )
+}
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const [sesion, setSesion] = useState<SesionUsuario | null>(null)
@@ -26,27 +65,20 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const nombre = sesion?.nombre ?? ""
   const claseGrupo = Boolean(sesion && claseId && !esModoIndependiente(claseId))
 
-  const contenido = (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <AppHeader />
-      <main className="flex min-h-0 flex-1 overflow-hidden bg-surface p-2 md:p-4">
-        <div className="mx-auto flex h-full min-h-0 w-full max-w-[1800px] overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
-          {children}
-        </div>
-      </main>
-    </div>
-  )
+  const interior = <ShellInterior>{children}</ShellInterior>
 
   if (claseGrupo) {
     return (
-      <SalaAudioProvider claseId={claseId} nombre={nombre}>
-        <PizarraProvider claseId={claseId}>
-          {contenido}
-          <PizarraOverlay claseId={claseId} />
-        </PizarraProvider>
-      </SalaAudioProvider>
+      <LecturaUiProvider>
+        <SalaAudioProvider claseId={claseId} nombre={nombre}>
+          <PizarraProvider claseId={claseId}>
+            {interior}
+            <PizarraOverlay claseId={claseId} />
+          </PizarraProvider>
+        </SalaAudioProvider>
+      </LecturaUiProvider>
     )
   }
 
-  return contenido
+  return <LecturaUiProvider>{interior}</LecturaUiProvider>
 }
