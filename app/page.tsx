@@ -27,6 +27,7 @@ import {
 } from "@/lib/sesionEstudio"
 
 import LeccionControls from "@/components/LeccionControls"
+import MobilePdfControls from "@/components/MobilePdfControls"
 import NotasPanel from "@/components/NotasPanel"
 import ComunicacionPanel from "@/components/ComunicacionPanel"
 import IniciarEstudioButton from "@/components/IniciarEstudioButton"
@@ -456,7 +457,7 @@ export default function Home() {
           mobileTab === "pdf" ? "flex flex-1" : "hidden lg:flex"
         }`}
       >
-        <div className="shrink-0 space-y-2 border-b border-border bg-card p-2 lg:hidden">
+        <MobilePdfControls scrollKey={pdfViewerKey}>
           {esMaestro && (
             <IniciarEstudioButton
               onIniciar={() => void handleIniciarEstudio()}
@@ -471,7 +472,7 @@ export default function Home() {
             setTipo={setTipo}
             onLeccionClick={irALeccionDelDia}
           />
-        </div>
+        </MobilePdfControls>
         {esMaestro && materialMaestroPdf && (
           <div className="shrink-0 border-b border-amber-300/50 bg-gradient-to-r from-amber-50 to-accent-soft px-3 py-2.5 lg:px-4">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-900/80">
