@@ -45,68 +45,80 @@ export default function AppHeader() {
         ? "Alumno"
         : "Independiente"
 
+  const portada = (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src="/segundo_trimestre.png"
+      alt="Segundo trimestre 2026"
+      className="h-full w-full object-contain object-right"
+    />
+  )
+
   return (
     <header className="relative shrink-0 overflow-hidden bg-gradient-to-r from-primary-dark via-primary to-primary-light text-white shadow-lg">
       <div
         className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_20%_50%,#c9a227_0%,transparent_50%)]"
         aria-hidden
       />
-      <div className="relative flex items-center gap-2 border-b-4 border-accent px-3 py-2.5 sm:gap-3 sm:px-4 md:gap-4 md:px-8 md:py-4">
-        <div className="min-w-0 flex-1 sm:max-w-[38%] lg:max-w-none lg:flex-none">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="font-display text-lg font-semibold tracking-tight sm:text-xl md:text-3xl">
-                Escuela Sabática
-              </h1>
-              <p className="mt-0.5 text-xs text-blue-100/90 sm:text-sm md:mt-1 md:text-base">
-                Lección del trimestre · Estudio bíblico diario
-              </p>
+      <div className="relative border-b-4 border-accent px-3 py-3 sm:px-4 md:px-8 md:py-4">
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-start md:gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <h1 className="font-display text-lg font-semibold tracking-tight sm:text-xl md:text-3xl">
+                  Escuela Sabática
+                </h1>
+                <p className="mt-0.5 text-xs text-blue-100/90 sm:text-sm md:mt-1 md:text-base">
+                  Lección del trimestre · Estudio bíblico diario
+                </p>
+              </div>
+              <div className="relative h-14 w-[4.5rem] shrink-0 sm:h-16 sm:w-24 md:hidden">
+                {portada}
+              </div>
             </div>
+
             {sesion && (
-              <button
-                type="button"
-                onClick={handleMenuPrincipal}
-                className="shrink-0 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm hover:bg-white/20 sm:text-xs"
-              >
-                Menú principal
-              </button>
-            )}
-          </div>
-          {sesion && (
-            <p className="mt-1 text-[11px] text-accent sm:text-xs">
-              {rolLabel}: <span className="font-medium">{sesion.nombre}</span>
-              {!independiente && sesion.claseNombre && (
-                <>
-                  {" "}
-                  · <span className="text-blue-100/90">{sesion.claseNombre}</span>
-                  {formatoCodigoLegible(sesion.claseId) && (
-                    <span className="text-blue-100/80">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                <p className="min-w-0 text-[11px] text-accent sm:text-xs">
+                  {rolLabel}: <span className="font-medium">{sesion.nombre}</span>
+                  {!independiente && sesion.claseNombre && (
+                    <>
                       {" "}
-                      · {formatoCodigoLegible(sesion.claseId)}
-                    </span>
+                      · <span className="text-blue-100/90">{sesion.claseNombre}</span>
+                      {formatoCodigoLegible(sesion.claseId) && (
+                        <span className="text-blue-100/80">
+                          {" "}
+                          · {formatoCodigoLegible(sesion.claseId)}
+                        </span>
+                      )}
+                    </>
                   )}
-                </>
-              )}
-              {independiente && (
-                <span className="text-blue-100/80"> · estudio personal</span>
-              )}
-            </p>
-          )}
-          <ChatEnLineaIndicador placement="mobile" />
-          <PwaInstallButton />
-        </div>
+                  {independiente && (
+                    <span className="text-blue-100/80"> · estudio personal</span>
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleMenuPrincipal}
+                  className="shrink-0 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm hover:bg-white/20 sm:text-xs"
+                >
+                  Menú principal
+                </button>
+              </div>
+            )}
 
-        <ChatEnLineaIndicador placement="desktop" />
+            <div className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
+              <TextSizeControl variant="header" />
+              <ChatEnLineaIndicador placement="mobile" />
+              <PwaInstallButton />
+            </div>
+          </div>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
-          <TextSizeControl variant="header" />
-          <div className="relative h-12 w-24 sm:h-14 sm:w-28 md:h-20 md:w-44 lg:h-24 lg:w-52">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/segundo_trimestre.png"
-            alt="Segundo trimestre 2026"
-            className="h-full w-full object-contain object-right"
-          />
+          <ChatEnLineaIndicador placement="desktop" />
+
+          <div className="hidden shrink-0 items-center gap-3 md:flex">
+            <TextSizeControl variant="header" />
+            <div className="relative h-20 w-44 lg:h-24 lg:w-52">{portada}</div>
           </div>
         </div>
       </div>

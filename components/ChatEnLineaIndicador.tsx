@@ -64,7 +64,7 @@ export default function ChatEnLineaIndicador({ placement }: { placement: Placeme
   )
 
   if (placement === "mobile") {
-    return <div className="mt-1 min-w-0 md:hidden">{contenido}</div>
+    return <div className="min-w-0 md:hidden">{contenido}</div>
   }
 
   return (
