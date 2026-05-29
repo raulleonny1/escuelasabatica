@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import ChatEnLineaIndicador from "@/components/ChatEnLineaIndicador"
 import PwaInstallButton from "@/components/PwaInstallButton"
+import SalaAudioBanner from "@/components/SalaAudioBanner"
 import TextSizeControl from "@/components/TextSizeControl"
 import {
   esModoIndependiente,
@@ -106,6 +107,8 @@ export default function AppHeader() {
                 </button>
               </div>
             )}
+
+            {sesion && !independiente && <SalaAudioBanner />}
 
             <div className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
               <TextSizeControl variant="header" />

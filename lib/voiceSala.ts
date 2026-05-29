@@ -144,10 +144,23 @@ export async function enviarSenal(
   claseId: string,
   signal: Omit<VoiceSignal, "id">
 ) {
-  await addDoc(signalsCol(claseId), {
-    ...signal,
+  const payload: Record<string, unknown> = {
+    from: signal.from,
+    to: signal.to,
+    type: signal.type,
     createdAt: serverTimestamp(),
-  })
+  }
+  if (signal.sdp) {
+    payload.sdp = { type: signal.sdp.type, sdp: signal.sdp.sdp }
+  }
+  if (signal.candidate) {
+    payload.candidate = {
+      candidate: signal.candidate.candidate,
+      sdpMid: signal.candidate.sdpMid ?? null,
+      sdpMLineIndex: signal.candidate.sdpMLineIndex ?? null,
+    }
+  }
+  await addDoc(signalsCol(claseId), payload)
 }
 
 export function subscribeSenalesVoz(
@@ -167,13 +180,23 @@ export function subscribeSenalesVoz(
       if (procesados.has(id)) return
       procesados.add(id)
       const data = change.doc.data()
+      const rawSdp = data.sdp as Record<string, string> | undefined
+      const rawCand = data.candidate as Record<string, unknown> | undefined
       onSignal({
         id,
         from: (data.from as string) ?? "",
         to: (data.to as string) ?? "",
         type: data.type as VoiceSignal["type"],
-        sdp: data.sdp as RTCSessionDescriptionInit | undefined,
-        candidate: data.candidate as RTCIceCandidateInit | undefined,
+        sdp: rawSdp?.sdp
+          ? { type: rawSdp.type as RTCSdpType, sdp: rawSdp.sdp }
+          : undefined,
+        candidate: rawCand?.candidate
+          ? {
+              candidate: rawCand.candidate as string,
+              sdpMid: (rawCand.sdpMid as string | null) ?? undefined,
+              sdpMLineIndex: (rawCand.sdpMLineIndex as number | null) ?? undefined,
+            }
+          : undefined,
       })
       deleteDoc(change.doc.ref).catch(() => {})
     })

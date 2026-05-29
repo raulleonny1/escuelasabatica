@@ -30,8 +30,6 @@ import LeccionControls from "@/components/LeccionControls"
 import MobilePdfControls from "@/components/MobilePdfControls"
 import NotasPanel from "@/components/NotasPanel"
 import ComunicacionPanel from "@/components/ComunicacionPanel"
-import { SalaAudioProvider } from "@/components/SalaAudioContext"
-import SalaAudioBarraFlotante from "@/components/SalaAudioBarraFlotante"
 import IniciarEstudioButton from "@/components/IniciarEstudioButton"
 import PantallaAcceso from "@/components/PantallaAcceso"
 import PanelMaestro from "@/components/PanelMaestro"
@@ -607,8 +605,6 @@ export default function Home() {
         </div>
       )}
 
-      {chatClaseActiva && !isLg && mobileTab !== "chat" && <SalaAudioBarraFlotante />}
-
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 flex border-t border-border bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.08)] lg:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -802,14 +798,6 @@ export default function Home() {
       )}
     </div>
   )
-
-  if (chatClaseActiva) {
-    return (
-      <SalaAudioProvider claseId={claseId} nombre={chatNombre}>
-        {vistaPrincipal}
-      </SalaAudioProvider>
-    )
-  }
 
   return vistaPrincipal
 }

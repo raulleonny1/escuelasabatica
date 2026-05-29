@@ -1,7 +1,7 @@
 import type { Viewport } from "next"
 import Script from "next/script"
 import { Lora, Source_Sans_3 } from "next/font/google"
-import AppHeader from "@/components/AppHeader"
+import AppShell from "@/components/AppShell"
 import PwaInstallPrompt from "@/components/PwaInstallPrompt"
 import "./globals.css"
 
@@ -60,15 +60,7 @@ export default function RootLayout({
         <Script id="es-text-size-boot" strategy="beforeInteractive">
           {textSizeBoot}
         </Script>
-        <div className="flex h-dvh flex-col overflow-hidden">
-          <AppHeader />
-
-          <main className="flex min-h-0 flex-1 overflow-hidden bg-surface p-2 md:p-4">
-            <div className="flex h-full min-h-0 w-full max-w-[1800px] mx-auto rounded-2xl border border-border bg-card shadow-xl overflow-hidden">
-              {children}
-            </div>
-          </main>
-        </div>
+        <AppShell>{children}</AppShell>
         <PwaInstallPrompt />
       </body>
     </html>
