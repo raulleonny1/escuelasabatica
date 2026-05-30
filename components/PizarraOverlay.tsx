@@ -18,6 +18,8 @@ import {
 
 const COLORES = ["#1e293b", "#dc2626", "#2563eb", "#16a34a"] as const
 const GROSORES = [2, 4, 7] as const
+const GROSORES_BORRADOR = [8, 16, 28, 44] as const
+const ETIQUETAS_BORRADOR = ["S", "M", "L", "XL"] as const
 
 function escalaGrosor(grosor: number, w: number) {
   return grosor * (w / 1000)
@@ -34,7 +36,11 @@ function dibujarPunto(
   if (pts.length < 1) return
 
   const p = desnormalizarPunto(pts[0].x, pts[0].y, w, h)
-  const radio = Math.max(escalaGrosor(trazo.grosor, w) * 0.9, 2)
+  const base = escalaGrosor(trazo.grosor, w)
+  const radio =
+    trazo.herramienta === "borrador"
+      ? Math.max(base * 0.55, 4)
+      : Math.max(base * 0.9, 2)
 
   ctx.save()
   ctx.scale(dpr, dpr)
@@ -227,7 +233,10 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
   const [color, setColor] = useState<string>(COLORES[0])
   const [grosor, setGrosor] = useState<number>(GROSORES[1])
+  const [grosorBorrador, setGrosorBorrador] = useState<number>(GROSORES_BORRADOR[1])
   const [herramienta, setHerramienta] = useState<HerramientaPizarra>("lapiz")
+
+  const grosorActivo = herramienta === "borrador" ? grosorBorrador : grosor
 
   const esMaestro = pizarra?.esMaestro ?? false
   const abierta = pizarra?.abierta ?? false
@@ -268,7 +277,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
         trazoActivo.current,
         herramienta,
         color,
-        herramienta === "borrador" ? grosor * 2.5 : grosor
+        grosorActivo
       )
       if (preview) {
         dibujarTrazo(
@@ -285,7 +294,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
         )
       }
     }
-  }, [color, grosor, herramienta])
+  }, [color, grosor, grosorBorrador, herramienta])
 
   useEffect(() => {
     if (!abierta) return
@@ -380,7 +389,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
       const trazo = {
         pts: res.pts,
         color: herramientaGuardar === "borrador" ? "#000000" : color,
-        grosor: herramientaGuardar === "borrador" ? grosor * 2.5 : grosor,
+        grosor: herramientaGuardar === "borrador" ? grosorBorrador : grosor,
         herramienta: herramientaGuardar === "borrador" ? ("borrador" as const) : ("lapiz" as const),
         tipo: res.tipo,
         pagina: paginaActual,
@@ -472,22 +481,50 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
             </div>
 
             <div className="flex items-center gap-1 rounded-lg bg-white/10 p-1">
-              {GROSORES.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setGrosor(g)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-md ${
-                    grosor === g ? "bg-accent text-primary-dark" : "text-white/90"
-                  }`}
-                  aria-label={`Grosor ${g}`}
-                >
-                  <span
-                    className="rounded-full bg-current"
-                    style={{ width: g + 4, height: g + 4 }}
-                  />
-                </button>
-              ))}
+              {herramienta === "borrador" ? (
+                <>
+                  <span className="hidden px-1 text-[10px] font-medium text-white/75 sm:inline">
+                    Borrador
+                  </span>
+                  {GROSORES_BORRADOR.map((g, i) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setGrosorBorrador(g)}
+                      className={`flex h-8 min-w-8 items-center justify-center rounded-md px-1.5 ${
+                        grosorBorrador === g ? "bg-accent text-primary-dark" : "text-white/90"
+                      }`}
+                      aria-label={`Tamaño borrador ${ETIQUETAS_BORRADOR[i]}`}
+                      title={`Tamaño ${ETIQUETAS_BORRADOR[i]}`}
+                    >
+                      <span
+                        className="rounded-full bg-current"
+                        style={{
+                          width: Math.min(10 + i * 5, 22),
+                          height: Math.min(10 + i * 5, 22),
+                        }}
+                      />
+                    </button>
+                  ))}
+                </>
+              ) : (
+                GROSORES.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGrosor(g)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-md ${
+                      grosor === g ? "bg-accent text-primary-dark" : "text-white/90"
+                    }`}
+                    aria-label={`Grosor lápiz ${g}`}
+                  >
+                    <span
+                      className="rounded-full bg-current"
+                      style={{ width: g + 4, height: g + 4 }}
+                    />
+                  </button>
+                ))
+              )}
             </div>
 
             <button
@@ -528,6 +565,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
               className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
                 herramienta === "borrador" ? "bg-accent text-primary-dark" : "bg-white/10"
               }`}
+              title="Elige el tamaño con los círculos: S, M, L, XL"
             >
               Borrador
             </button>
@@ -572,6 +610,12 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
           </div>
         )}
       </div>
+
+      {esMaestro && herramienta === "borrador" && (
+        <p className="shrink-0 bg-primary/90 px-3 py-1.5 text-center text-[10px] text-blue-100/90">
+          Borrador: elige tamaño S · M · L · XL en la barra de arriba
+        </p>
+      )}
 
       {esMaestro && herramienta === "lapiz" && (
         <p className="shrink-0 bg-primary/90 px-3 py-1.5 text-center text-[10px] text-blue-100/90">
