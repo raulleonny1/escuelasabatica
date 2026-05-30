@@ -575,7 +575,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
       {esMaestro && herramienta === "lapiz" && (
         <p className="shrink-0 bg-primary/90 px-3 py-1.5 text-center text-[10px] text-blue-100/90">
-          Con el lápiz: toque → punto · horizontal → subraya · cuadrado → rectángulo · círculo → óvalo
+          Lápiz: dibuja libremente. Usa Subrayar o Encerrar si quieres formas.
         </p>
       )}
 

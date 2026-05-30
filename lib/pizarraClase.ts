@@ -454,16 +454,12 @@ export function resolverTrazoConGesto(
   if (herramienta === "borrador") {
     return { pts: ptsAString(pts), tipo: "trazo" }
   }
+  if (herramienta === "lapiz") {
+    if (esTrazoPunto(pts)) {
+      return { pts: ptsAString(ptsParaPunto(pts)), tipo: "punto" }
+    }
+    return { pts: ptsAString(pts), tipo: "trazo" }
+  }
 
-  const tipo = detectarGestoPizarra(pts)
-  if (tipo === "subrayado") {
-    return { pts: ptsAString(ptsParaSubrayado(pts)), tipo: "subrayado" }
-  }
-  if (tipo === "circulo") {
-    return { pts: ptsAString(ptsParaCirculo(pts)), tipo: "circulo" }
-  }
-  if (tipo === "rectangulo") {
-    return { pts: ptsAString(ptsParaRectangulo(pts)), tipo: "rectangulo" }
-  }
   return { pts: ptsAString(pts), tipo: "trazo" }
 }
