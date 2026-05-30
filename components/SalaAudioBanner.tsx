@@ -45,49 +45,47 @@ export default function SalaAudioBanner() {
 
   return (
     <div
-      className={`max-w-full rounded-xl border px-3 py-2 backdrop-blur-sm ${
-        participantes.length > 0 ? "w-full max-w-2xl" : "inline-flex w-fit"
-      } ${
+      className={`inline-flex w-fit max-w-full flex-col gap-1 rounded-xl border px-3 py-2 backdrop-blur-sm ${
         enSala
           ? "border-emerald-400/40 bg-emerald-500/15"
           : "border-white/20 bg-white/10"
       }`}
     >
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            {enSala && (
-              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
-            )}
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-white sm:text-xs">
-              {enSala ? "Audio en vivo" : "Conectando…"}
-            </p>
-            {participantes.length > 0 && (
-              <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-blue-100">
-                {participantes.length}
-              </span>
-            )}
-          </div>
-
-          {participantes.length > 0 && (
-            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto custom-scroll">
-              {participantes.map((p) => (
-                <span
-                  key={p.peerId}
-                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-[11px] ${
-                    p.speaking
-                      ? "bg-emerald-400/35 text-white ring-1 ring-emerald-300/70"
-                      : "bg-white/10 text-blue-50"
-                  }`}
-                >
-                  <span className="font-bold">{p.nombre.charAt(0).toUpperCase()}</span>
-                  <span className="max-w-[4.5rem] truncate">{p.nombre.split(" ")[0]}</span>
-                  {p.speaking && <span className="text-[9px] uppercase text-emerald-200">●</span>}
-                </span>
-              ))}
-            </div>
+      <div className="inline-flex max-w-full flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          {enSala && (
+            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
           )}
+          <p className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-white sm:text-xs">
+            {enSala ? "Audio en vivo" : "Conectando…"}
+          </p>
+          {participantes.length > 0 && (
+            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-blue-100">
+              {participantes.length}
+            </span>
+          )}
+        </div>
 
-          <div className={`flex shrink-0 gap-1.5 ${participantes.length > 0 ? "ml-auto" : ""}`}>
+        {participantes.length > 0 && (
+          <div className="flex max-w-[11rem] shrink-0 gap-1 overflow-x-auto custom-scroll sm:max-w-[16rem]">
+            {participantes.map((p) => (
+              <span
+                key={p.peerId}
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-[11px] ${
+                  p.speaking
+                    ? "bg-emerald-400/35 text-white ring-1 ring-emerald-300/70"
+                    : "bg-white/10 text-blue-50"
+                }`}
+              >
+                <span className="font-bold">{p.nombre.charAt(0).toUpperCase()}</span>
+                <span className="max-w-[3.5rem] truncate">{p.nombre.split(" ")[0]}</span>
+                {p.speaking && <span className="text-[9px] text-emerald-200">●</span>}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex shrink-0 gap-1.5">
           <button
             type="button"
             onClick={() => void toggleSilencio()}
@@ -111,7 +109,7 @@ export default function SalaAudioBanner() {
       </div>
 
       {error && (
-        <p className="mt-1.5 rounded-md bg-red-500/25 px-2 py-1 text-[11px] text-red-100">{error}</p>
+        <p className="rounded-md bg-red-500/25 px-2 py-1 text-[11px] text-red-100">{error}</p>
       )}
     </div>
   )
