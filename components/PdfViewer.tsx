@@ -17,7 +17,8 @@ function detectarModoTactil(): boolean {
   if (typeof window === "undefined") return false
   return (
     window.matchMedia("(pointer: coarse)").matches ||
-    window.matchMedia("(max-width: 1023px)").matches
+    window.matchMedia("(hover: none)").matches ||
+    window.matchMedia("(max-width: 1024px)").matches
   )
 }
 
@@ -155,7 +156,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
 
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 2) return
-      e.preventDefault()
+      if (e.cancelable) e.preventDefault()
       e.stopPropagation()
       const { dist, escala: base } = pinchInicio.current
       if (dist <= 0) return
@@ -178,7 +179,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
       if (e.touches.length < 2) return
       const target = e.target as Node | null
       if (shellRef.current?.contains(target)) return
-      e.preventDefault()
+      if (e.cancelable) e.preventDefault()
     }
     document.addEventListener("touchmove", bloquearZoomPagina, { passive: false })
     return () => document.removeEventListener("touchmove", bloquearZoomPagina)
@@ -186,7 +187,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
 
   if (!montado || !paginaLista) {
     return (
-      <div className="pdf-viewer-shell flex h-full min-h-[200px] items-center justify-center lg:min-h-[480px]">
+      <div className="pdf-viewer-shell flex items-center justify-center">
         <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     )
@@ -195,7 +196,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
   const pct = Math.round(escala * 100)
 
   return (
-    <div ref={shellRef} className="pdf-viewer-shell relative h-full w-full min-h-[200px] lg:min-h-[480px]">
+    <div ref={shellRef} className="pdf-viewer-shell">
       <div className="sr-only" aria-hidden>
         <SyncEscala onEscala={syncEscala} CurrentScale={CurrentScale} />
       </div>

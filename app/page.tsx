@@ -513,7 +513,7 @@ export default function Home() {
             </button>
           </div>
         )}
-        <div className="relative min-h-0 flex-1 w-full">
+        <div className="layout-pdf-viewport flex min-h-0 flex-1 flex-col overflow-hidden">
           <MobilePdfControls scrollKey={pdfViewerKey}>
             <LeccionControls
               semana={semana}
@@ -523,14 +523,16 @@ export default function Home() {
               onLeccionClick={irALeccionDelDia}
             />
           </MobilePdfControls>
-          <PdfErrorBoundary url={pdfUrlActivo}>
-            <PdfViewer
-              key={pdfViewerKey}
-              url={pdfUrlActivo}
-              irAlDiaLectura={!materialMaestroPdf && tipo === "leccion"}
-              semana={semana}
-            />
-          </PdfErrorBoundary>
+          <div className="layout-pdf-canvas relative min-h-0 flex-1 overflow-hidden">
+            <PdfErrorBoundary url={pdfUrlActivo}>
+              <PdfViewer
+                key={pdfViewerKey}
+                url={pdfUrlActivo}
+                irAlDiaLectura={!materialMaestroPdf && tipo === "leccion"}
+                semana={semana}
+              />
+            </PdfErrorBoundary>
+          </div>
         </div>
       </div>
 

@@ -19,7 +19,6 @@ html {
   height: 100%;
   -webkit-text-size-adjust: 100%;
   font-size: 100%;
-  touch-action: manipulation;
 }
 
 /* Escala tipográfica global (rem); el PDF no se ve afectado */
@@ -57,9 +56,7 @@ html[data-text-size="3"] .text-\[11px\] {
 
 body {
   height: 100%;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  touch-action: manipulation;
+  overscroll-behavior: none;
 }
 
 body {
@@ -123,23 +120,49 @@ body {
   }
 }
 
-/* Visor PDF: altura completa del panel; zoom solo dentro del PDF */
-.pdf-viewer-shell {
-  height: 100%;
+/* Visor PDF: contenedor acotado; solo .rpv-core__inner-pages hace scroll */
+.layout-pdf-panel {
   min-height: 0;
-  isolation: isolate;
-  contain: layout style;
 }
 
-.pdf-viewer-shell .rpv-core__viewer {
+.layout-pdf-viewport {
+  position: relative;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-pdf-canvas {
+  position: relative;
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pdf-viewer-shell {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  min-height: 400px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pdf-viewer-shell .rpv-core__viewer,
+.pdf-viewer-shell .rpv-core__inner-container {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
   background: #f1f5f9;
-  touch-action: pan-x pan-y;
 }
 
 .pdf-viewer-shell .rpv-core__inner-pages {
-  min-height: 100%;
+  height: 100% !important;
+  max-height: 100%;
+  min-height: 0 !important;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   touch-action: pan-x pan-y;
 }
 
@@ -148,14 +171,30 @@ body {
   transform-origin: top center;
 }
 
-/* Botones y controles táctiles en móvil */
+@media (min-width: 1024px) {
+  .pdf-viewer-shell {
+    position: relative;
+    inset: auto;
+    min-height: 480px;
+  }
+}
+
+/* Tablet / iPad y móvil: espacio para nav inferior y barra de zoom */
 @media (max-width: 1023px) {
   .pdf-viewer-shell .rpv-core__inner-pages {
-    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   }
 
   .pdf-zoom-bar {
     bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* iOS Safari: refuerzo del scroll interno del PDF */
+@supports (-webkit-touch-callout: none) {
+  .pdf-viewer-shell .rpv-core__inner-pages {
+    overflow-y: scroll !important;
+    -webkit-overflow-scrolling: touch;
   }
 }
 

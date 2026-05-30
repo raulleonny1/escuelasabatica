@@ -49,6 +49,8 @@ export default class PdfErrorBoundary extends Component<Props, State> {
       )
     }
 
-    return this.props.children
+    return this.props.children ? (
+      <div className="h-full min-h-0">{this.props.children}</div>
+    ) : null
   }
 }

@@ -103,8 +103,10 @@ export default function MobilePdfControls({ children, scrollKey }: MobilePdfCont
 
   return (
     <div
-      className={`absolute inset-x-0 top-0 z-20 border-b border-border bg-card shadow-sm transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none lg:hidden ${
-        oculto ? "-translate-y-full pointer-events-none" : "translate-y-0"
+      className={`shrink-0 overflow-hidden border-b border-border bg-card shadow-sm transition-[max-height,transform,opacity] duration-200 ease-out will-change-transform motion-reduce:transition-none lg:hidden ${
+        oculto
+          ? "pointer-events-none max-h-0 -translate-y-2 border-transparent opacity-0"
+          : "max-h-[40vh] translate-y-0 opacity-100"
       }`}
     >
       <div className="space-y-2 p-2">{children}</div>
