@@ -1,10 +1,44 @@
 "use client"
 
+import { useMemo } from "react"
 import { useSalaAudioOptional } from "@/components/SalaAudioContext"
+import { getChatSessionId } from "@/lib/chat"
 
-/** Audio de clase en la cabecera — compacto y alineado. */
+/** SVG tamaño fijo: solo cambia opacidad del relleno, nunca el layout. */
+function IconoMicrofono({
+  activo,
+  className = "h-3.5 w-3.5",
+}: {
+  activo: boolean
+  className?: string
+}) {
+  return (
+    <svg className={`shrink-0 ${className}`} viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M12 14a3 3 0 003-3V6a3 3 0 00-6 0v5a3 3 0 003 3z"
+        className={activo ? "fill-emerald-400" : "fill-white/15"}
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 11a7 7 0 0014 0M12 18v3M9 21h6"
+        className="fill-none stroke-current"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+const ANCHO_BARRA = "w-[19rem]"
+const ANCHO_CONTROLES = "w-[8.75rem]"
+
+/** Audio en vivo: caja de tamaño fijo; botones anclados a la derecha. */
 export default function SalaAudioBanner() {
   const sala = useSalaAudioOptional()
+  const peerId = useMemo(() => getChatSessionId(), [])
+
   if (!sala) return null
 
   const {
@@ -18,24 +52,25 @@ export default function SalaAudioBanner() {
     toggleSilencio,
   } = sala
 
+  const yoHablo = participantes.some((p) => p.peerId === peerId && p.speaking)
+  const otros = useMemo(
+    () => [...participantes].sort((a, b) => a.peerId.localeCompare(b.peerId)).slice(0, 5),
+    [participantes]
+  )
+
   if (!enSala && !conectando && !error) {
     return (
       <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm">
         <span className="text-base leading-none" aria-hidden>
           🎙️
         </span>
-        <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-accent sm:text-xs">
-            Audio de la clase
-          </p>
-          <p className="hidden text-[11px] text-blue-100/80 lg:block">
-            Habla con tu grupo sin salir de la app
-          </p>
-        </div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-accent sm:text-xs">
+          Audio de la clase
+        </p>
         <button
           type="button"
           onClick={() => void entrarSala()}
-          className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-primary-dark shadow-sm active:opacity-90"
+          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-xs font-bold text-primary-dark shadow-sm active:opacity-90"
         >
           Unirse
         </button>
@@ -44,64 +79,63 @@ export default function SalaAudioBanner() {
   }
 
   return (
-    <div
-      className={`inline-flex w-fit max-w-full flex-col gap-1 rounded-xl border px-3 py-2 backdrop-blur-sm ${
-        enSala
-          ? "border-emerald-400/40 bg-emerald-500/15"
-          : "border-white/20 bg-white/10"
-      }`}
-    >
-      <div className="inline-flex max-w-full flex-wrap items-center gap-2">
-        <div className="flex shrink-0 items-center gap-2">
-          {enSala && (
-            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
-          )}
-          <p className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-white sm:text-xs">
-            {enSala ? "Audio en vivo" : "Conectando…"}
+    <div className={`${ANCHO_BARRA} max-w-full shrink-0`}>
+      <div
+        className={`relative h-10 rounded-xl border backdrop-blur-sm ${
+          enSala
+            ? "border-emerald-400/40 bg-emerald-500/15"
+            : "border-white/20 bg-white/10"
+        }`}
+      >
+        {/* Info + micrófonos de participantes (zona izquierda, sin empujar botones) */}
+        <div
+          className="absolute inset-y-0 left-0 flex items-center gap-2 overflow-hidden pl-3"
+          style={{ right: "8.75rem" }}
+        >
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              enSala ? "bg-emerald-400" : "bg-white/40"
+            }`}
+            aria-hidden
+          />
+          <p className="shrink-0 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-white">
+            {enSala ? "Audio" : "…"}
           </p>
-          {participantes.length > 0 && (
-            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-blue-100">
-              {participantes.length}
-            </span>
-          )}
-        </div>
 
-        {participantes.length > 0 && (
-          <div className="flex max-w-[11rem] shrink-0 gap-1 overflow-x-auto custom-scroll sm:max-w-[16rem]">
-            {participantes.map((p) => (
+          <div className="flex shrink-0 items-center gap-1">
+            {otros.map((p) => (
               <span
                 key={p.peerId}
-                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-[11px] ${
-                  p.speaking
-                    ? "bg-emerald-400/35 text-white ring-1 ring-emerald-300/70"
-                    : "bg-white/10 text-blue-50"
-                }`}
+                className="flex h-4 w-4 shrink-0 items-center justify-center"
+                title={p.nombre}
               >
-                <span className="font-bold">{p.nombre.charAt(0).toUpperCase()}</span>
-                <span className="max-w-[3.5rem] truncate">{p.nombre.split(" ")[0]}</span>
-                {p.speaking && <span className="text-[9px] text-emerald-200">●</span>}
+                <IconoMicrofono activo={p.speaking} className="h-3 w-3 text-white/50" />
               </span>
             ))}
           </div>
-        )}
+        </div>
 
-        <div className="flex shrink-0 gap-1.5">
+        {/* Controles fijos a la derecha — nunca se mueven */}
+        <div
+          className={`absolute inset-y-0 right-0 flex ${ANCHO_CONTROLES} items-center justify-end gap-1.5 border-l border-white/15 px-2`}
+        >
           <button
             type="button"
             onClick={() => void toggleSilencio()}
             disabled={!enSala || conectando}
-            className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold active:opacity-90 disabled:opacity-50 sm:text-xs ${
+            className={`flex h-8 w-[4.5rem] shrink-0 items-center justify-center gap-1 rounded-lg text-[11px] font-semibold active:opacity-90 disabled:opacity-50 ${
               silenciado ? "bg-amber-400 text-amber-950" : "bg-white/15 text-white"
             }`}
             aria-pressed={silenciado}
           >
-            {silenciado ? "🔇 Mic" : "🎤 Mic"}
+            <IconoMicrofono activo={!silenciado && yoHablo} className="h-3.5 w-3.5" />
+            Mic
           </button>
           <button
             type="button"
             onClick={() => void salirSala()}
             disabled={conectando}
-            className="rounded-lg bg-red-500/90 px-2.5 py-1 text-[11px] font-semibold text-white active:opacity-90 disabled:opacity-50 sm:text-xs"
+            className="flex h-8 w-[3.25rem] shrink-0 items-center justify-center rounded-lg bg-red-500/90 text-[11px] font-semibold text-white active:opacity-90 disabled:opacity-50"
           >
             Salir
           </button>
@@ -109,7 +143,7 @@ export default function SalaAudioBanner() {
       </div>
 
       {error && (
-        <p className="rounded-md bg-red-500/25 px-2 py-1 text-[11px] text-red-100">{error}</p>
+        <p className="mt-1 rounded-md bg-red-500/25 px-2 py-1 text-[11px] text-red-100">{error}</p>
       )}
     </div>
   )

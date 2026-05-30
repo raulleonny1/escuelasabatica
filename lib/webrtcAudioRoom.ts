@@ -412,9 +412,14 @@ export class WebRTCAudioRoom {
       let sum = 0
       for (let i = 0; i < buf.length; i++) sum += buf[i]
       const avg = sum / buf.length
-      const hablando = !this.silenciado && avg > 18
+      const umbralEncendido = 18
+      const umbralApagado = 10
+      const hablando =
+        !this.silenciado &&
+        (this.ultimoSpeaking ? avg > umbralApagado : avg > umbralEncendido)
       const ahora = Date.now()
-      if (hablando !== this.ultimoSpeaking && ahora - ultimoEnvio > 400) {
+      const pausa = this.ultimoSpeaking ? 550 : 200
+      if (hablando !== this.ultimoSpeaking && ahora - ultimoEnvio > pausa) {
         this.ultimoSpeaking = hablando
         ultimoEnvio = ahora
         void actualizarEstadoVoz(this.claseId, this.peerId, { speaking: hablando })
