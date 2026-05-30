@@ -57,16 +57,17 @@ export default function RootLayout({
 
   return (
     <html lang="es" data-text-size="0" className={`${lora.variable} ${sourceSans.variable}`}>
+      <head>
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6850511900744053"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="m-0 p-0 antialiased">
         <Script id="es-text-size-boot" strategy="beforeInteractive">
           {textSizeBoot}
         </Script>
-        <Script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6850511900744053"
-          crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
         <AppShell>{children}</AppShell>
         <PwaInstallPrompt />
       </body>
