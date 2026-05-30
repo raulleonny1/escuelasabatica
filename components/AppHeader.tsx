@@ -153,7 +153,7 @@ export default function AppHeader() {
             </div>
 
             {!independiente && (
-              <div className="mt-2.5 max-w-3xl">
+              <div className="mt-2.5">
                 <SalaAudioBanner />
               </div>
             )}

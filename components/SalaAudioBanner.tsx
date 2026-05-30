@@ -20,22 +20,22 @@ export default function SalaAudioBanner() {
 
   if (!enSala && !conectando && !error) {
     return (
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm">
+      <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm">
         <span className="text-base leading-none" aria-hidden>
           🎙️
         </span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-accent sm:text-xs">
             Audio de la clase
           </p>
-          <p className="hidden text-[11px] text-blue-100/80 sm:block">
+          <p className="hidden text-[11px] text-blue-100/80 lg:block">
             Habla con tu grupo sin salir de la app
           </p>
         </div>
         <button
           type="button"
           onClick={() => void entrarSala()}
-          className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-primary-dark shadow-sm active:opacity-90 sm:px-4 sm:py-2 sm:text-sm"
+          className="shrink-0 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold text-primary-dark shadow-sm active:opacity-90"
         >
           Unirse
         </button>
@@ -45,45 +45,49 @@ export default function SalaAudioBanner() {
 
   return (
     <div
-      className={`rounded-xl border px-3 py-2 backdrop-blur-sm ${
+      className={`max-w-full rounded-xl border px-3 py-2 backdrop-blur-sm ${
+        participantes.length > 0 ? "w-full max-w-2xl" : "inline-flex w-fit"
+      } ${
         enSala
           ? "border-emerald-400/40 bg-emerald-500/15"
           : "border-white/20 bg-white/10"
       }`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {enSala && (
-            <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
-          )}
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-white sm:text-xs">
-            {enSala ? "Audio en vivo" : "Conectando…"}
-          </p>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            {enSala && (
+              <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]" />
+            )}
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-white sm:text-xs">
+              {enSala ? "Audio en vivo" : "Conectando…"}
+            </p>
+            {participantes.length > 0 && (
+              <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-blue-100">
+                {participantes.length}
+              </span>
+            )}
+          </div>
+
           {participantes.length > 0 && (
-            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-blue-100">
-              {participantes.length}
-            </span>
+            <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto custom-scroll">
+              {participantes.map((p) => (
+                <span
+                  key={p.peerId}
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-[11px] ${
+                    p.speaking
+                      ? "bg-emerald-400/35 text-white ring-1 ring-emerald-300/70"
+                      : "bg-white/10 text-blue-50"
+                  }`}
+                >
+                  <span className="font-bold">{p.nombre.charAt(0).toUpperCase()}</span>
+                  <span className="max-w-[4.5rem] truncate">{p.nombre.split(" ")[0]}</span>
+                  {p.speaking && <span className="text-[9px] uppercase text-emerald-200">●</span>}
+                </span>
+              ))}
+            </div>
           )}
-        </div>
 
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto custom-scroll">
-          {participantes.map((p) => (
-            <span
-              key={p.peerId}
-              className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-[11px] ${
-                p.speaking
-                  ? "bg-emerald-400/35 text-white ring-1 ring-emerald-300/70"
-                  : "bg-white/10 text-blue-50"
-              }`}
-            >
-              <span className="font-bold">{p.nombre.charAt(0).toUpperCase()}</span>
-              <span className="max-w-[4.5rem] truncate">{p.nombre.split(" ")[0]}</span>
-              {p.speaking && <span className="text-[9px] uppercase text-emerald-200">●</span>}
-            </span>
-          ))}
-        </div>
-
-        <div className="ml-auto flex shrink-0 gap-1.5">
+          <div className={`flex shrink-0 gap-1.5 ${participantes.length > 0 ? "ml-auto" : ""}`}>
           <button
             type="button"
             onClick={() => void toggleSilencio()}
