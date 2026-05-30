@@ -23,6 +23,35 @@ function escalaGrosor(grosor: number, w: number) {
   return grosor * (w / 1000)
 }
 
+function dibujarPunto(
+  ctx: CanvasRenderingContext2D,
+  trazo: Pick<TrazoPizarra, "pts" | "color" | "grosor" | "herramienta">,
+  w: number,
+  h: number,
+  dpr: number
+) {
+  const pts = ptsDesdeString(trazo.pts)
+  if (pts.length < 1) return
+
+  const p = desnormalizarPunto(pts[0].x, pts[0].y, w, h)
+  const radio = Math.max(escalaGrosor(trazo.grosor, w) * 0.9, 2)
+
+  ctx.save()
+  ctx.scale(dpr, dpr)
+  ctx.beginPath()
+  ctx.arc(p.x, p.y, radio, 0, Math.PI * 2)
+
+  if (trazo.herramienta === "borrador") {
+    ctx.globalCompositeOperation = "destination-out"
+    ctx.fillStyle = "rgba(0,0,0,1)"
+  } else {
+    ctx.globalCompositeOperation = "source-over"
+    ctx.fillStyle = trazo.color
+  }
+  ctx.fill()
+  ctx.restore()
+}
+
 function dibujarTrazoLibre(
   ctx: CanvasRenderingContext2D,
   trazo: Pick<TrazoPizarra, "pts" | "color" | "grosor" | "herramienta">,
@@ -113,6 +142,33 @@ function dibujarCirculo(
   ctx.restore()
 }
 
+function dibujarRectangulo(
+  ctx: CanvasRenderingContext2D,
+  trazo: Pick<TrazoPizarra, "pts" | "color" | "grosor">,
+  w: number,
+  h: number,
+  dpr: number
+) {
+  const pts = ptsDesdeString(trazo.pts)
+  if (pts.length < 2) return
+
+  const a = desnormalizarPunto(pts[0].x, pts[0].y, w, h)
+  const b = desnormalizarPunto(pts[1].x, pts[1].y, w, h)
+  const x = Math.min(a.x, b.x)
+  const y = Math.min(a.y, b.y)
+  const rw = Math.abs(b.x - a.x)
+  const rh = Math.abs(b.y - a.y)
+  if (rw < 2 || rh < 2) return
+
+  ctx.save()
+  ctx.scale(dpr, dpr)
+  ctx.globalCompositeOperation = "source-over"
+  ctx.strokeStyle = trazo.color
+  ctx.lineWidth = escalaGrosor(trazo.grosor, w)
+  ctx.strokeRect(x, y, rw, rh)
+  ctx.restore()
+}
+
 function dibujarTrazo(
   ctx: CanvasRenderingContext2D,
   trazo: TrazoPizarra,
@@ -120,12 +176,20 @@ function dibujarTrazo(
   h: number,
   dpr: number
 ) {
+  if (trazo.tipo === "punto") {
+    dibujarPunto(ctx, trazo, w, h, dpr)
+    return
+  }
   if (trazo.herramienta === "borrador" || trazo.tipo === "trazo") {
     dibujarTrazoLibre(ctx, trazo, w, h, dpr)
     return
   }
   if (trazo.tipo === "subrayado") {
     dibujarSubrayado(ctx, trazo, w, h, dpr)
+    return
+  }
+  if (trazo.tipo === "rectangulo") {
+    dibujarRectangulo(ctx, trazo, w, h, dpr)
     return
   }
   if (trazo.tipo === "circulo") {
@@ -139,7 +203,7 @@ function trazoPreviewDesdeGestos(
   color: string,
   grosor: number
 ): Pick<TrazoPizarra, "pts" | "color" | "grosor" | "herramienta" | "tipo"> | null {
-  if (pts.length < 2) return null
+  if (pts.length < 1) return null
   const res = resolverTrazoConGesto(pts, herramienta)
   return {
     pts: res.pts,
@@ -199,7 +263,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
       dibujarTrazo(ctx, trazo, w, h, dpr)
     }
 
-    if (trazoActivo.current.length >= 2) {
+    if (trazoActivo.current.length >= 1) {
       const preview = trazoPreviewDesdeGestos(
         trazoActivo.current,
         herramienta,
@@ -306,15 +370,19 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
     const pts = trazoActivo.current
     trazoActivo.current = []
 
-    if (pts.length >= 2 && claseId) {
+    if (pts.length >= 1 && claseId) {
       const herramientaGuardar = herramienta
       const res = resolverTrazoConGesto(pts, herramientaGuardar)
+      if (res.tipo !== "punto" && pts.length < 2) {
+        redibujar()
+        return
+      }
       const trazo = {
         pts: res.pts,
         color: herramientaGuardar === "borrador" ? "#000000" : color,
         grosor: herramientaGuardar === "borrador" ? grosor * 2.5 : grosor,
         herramienta: herramientaGuardar === "borrador" ? ("borrador" as const) : ("lapiz" as const),
-        tipo: res.tipo as TipoTrazo,
+        tipo: res.tipo,
         pagina: paginaActual,
       }
       trazosRef.current = [
@@ -449,7 +517,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
               className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
                 herramienta === "encerrar" ? "bg-accent text-primary-dark" : "bg-white/10"
               }`}
-              title="Dibuja un círculo alrededor del contenido"
+              title="Dibuja alrededor: círculo u óvalo si es redondo, rectángulo si es cuadrado"
             >
               Encerrar
             </button>
@@ -507,7 +575,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
       {esMaestro && herramienta === "lapiz" && (
         <p className="shrink-0 bg-primary/90 px-3 py-1.5 text-center text-[10px] text-blue-100/90">
-          Con el lápiz: trazo horizontal → subraya · trazo cerrado → encierra en círculo
+          Con el lápiz: toque → punto · horizontal → subraya · cuadrado → rectángulo · círculo → óvalo
         </p>
       )}
 

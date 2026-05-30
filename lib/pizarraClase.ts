@@ -16,7 +16,7 @@ import { db } from "./firebase"
 import { normalizarCodigoClase } from "./clase"
 
 export type HerramientaPizarra = "lapiz" | "borrador" | "subrayar" | "encerrar"
-export type TipoTrazo = "trazo" | "subrayado" | "circulo"
+export type TipoTrazo = "trazo" | "subrayado" | "circulo" | "rectangulo" | "punto"
 
 export type TrazoPizarra = {
   id: string
@@ -221,7 +221,156 @@ function bboxPts(pts: { x: number; y: number }[]) {
   }
 }
 
-/** Detecta si un trazo libre parece subrayado o un círculo de encerrado. */
+function trazoCerrado(
+  pts: { x: number; y: number }[],
+  width: number,
+  height: number
+): boolean {
+  const first = pts[0]
+  const last = pts[pts.length - 1]
+  return Math.hypot(first.x - last.x, first.y - last.y) < Math.max(width, height) * 0.35
+}
+
+function margenEsquina(width: number, height: number): number {
+  return Math.max(10, Math.min(width, height) * 0.12)
+}
+
+/** Cuántas esquinas del bbox visitó el trazo (0–4). */
+function esquinasVisitadas(
+  pts: { x: number; y: number }[],
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number,
+  margin: number
+): number {
+  const corners = [
+    { x: minX, y: minY },
+    { x: maxX, y: minY },
+    { x: maxX, y: maxY },
+    { x: minX, y: maxY },
+  ]
+  let visitadas = 0
+  for (const c of corners) {
+    if (pts.some((p) => Math.hypot(p.x - c.x, p.y - c.y) <= margin)) visitadas++
+  }
+  return visitadas
+}
+
+/** Baja = trazo redondo; alta = trazo con esquinas. */
+function variacionRadial(
+  pts: { x: number; y: number }[],
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number
+): number {
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+  const radios = pts.map((p) => Math.hypot(p.x - cx, p.y - cy))
+  const media = radios.reduce((a, r) => a + r, 0) / radios.length
+  if (media < 1) return 1
+  const varianza = radios.reduce((a, r) => a + (r - media) ** 2, 0) / radios.length
+  return Math.sqrt(varianza) / media
+}
+
+/** Círculo: puntos repartidos en casi todos los sectores; cuadrado: huecos. */
+function angulosBienRepartidos(
+  pts: { x: number; y: number }[],
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number
+): boolean {
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+  const sectores = new Array(8).fill(false)
+  for (const p of pts) {
+    const a = Math.atan2(p.y - cy, p.x - cx)
+    const bin = Math.floor(((a + Math.PI) / (2 * Math.PI)) * 8) % 8
+    sectores[bin] = true
+  }
+  return sectores.filter(Boolean).length >= 6
+}
+
+/** Rectángulo: muchos tramos horizontales o verticales. */
+function fraccionTramosRectos(pts: { x: number; y: number }[]): number {
+  if (pts.length < 4) return 0
+  let rectos = 0
+  let total = 0
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i - 1].x
+    const dy = pts[i].y - pts[i - 1].y
+    if (Math.hypot(dx, dy) < 4) continue
+    total++
+    const horizontal = Math.abs(dy) <= Math.abs(dx) * 0.35
+    const vertical = Math.abs(dx) <= Math.abs(dy) * 0.35
+    if (horizontal || vertical) rectos++
+  }
+  return total > 0 ? rectos / total : 0
+}
+
+function puntajesFormaCerrada(
+  pts: { x: number; y: number }[],
+  minX: number,
+  maxX: number,
+  minY: number,
+  maxY: number
+): { circulo: number; rectangulo: number } {
+  const width = maxX - minX
+  const height = maxY - minY
+  const marginEsquina = margenEsquina(width, height)
+  const esquinas = esquinasVisitadas(pts, minX, maxX, minY, maxY, marginEsquina)
+  const variacion = variacionRadial(pts, minX, maxX, minY, maxY)
+  const tramosRectos = fraccionTramosRectos(pts)
+  const angulosOk = angulosBienRepartidos(pts, minX, maxX, minY, maxY)
+
+  let circulo = 0
+  let rectangulo = 0
+
+  // Rectángulo: necesita esquinas claras o lados rectos
+  if (esquinas >= 4) rectangulo += 4
+  else if (esquinas >= 3) rectangulo += 3
+  else if (esquinas === 2 && tramosRectos >= 0.45) rectangulo += 2
+
+  if (tramosRectos >= 0.55) rectangulo += 2
+  else if (tramosRectos >= 0.42 && esquinas >= 2) rectangulo += 1
+
+  // Círculo: sin esquinas, trazo redondo, ángulos repartidos
+  if (esquinas === 0) circulo += 3
+  else if (esquinas === 1) circulo += 1
+
+  if (variacion < 0.11) circulo += 3
+  else if (variacion < 0.14) circulo += 2
+  else if (variacion < 0.17) circulo += 1
+
+  if (angulosOk) circulo += 2
+
+  if (tramosRectos >= 0.38) circulo -= 2
+  if (esquinas >= 2) circulo -= esquinas
+
+  return { circulo, rectangulo }
+}
+
+/** Solo devuelve forma si hay confianza clara; si no, null (trazo libre). */
+function detectarFormaCerrada(
+  pts: { x: number; y: number }[]
+): "circulo" | "rectangulo" | null {
+  const { minX, maxX, minY, maxY } = bboxPts(pts)
+  const width = maxX - minX
+  const height = maxY - minY
+  if (width < 20 || height < 20) return null
+  if (!trazoCerrado(pts, width, height)) return null
+
+  const { circulo, rectangulo } = puntajesFormaCerrada(pts, minX, maxX, minY, maxY)
+
+  if (rectangulo >= 3 && rectangulo > circulo + 1) return "rectangulo"
+  if (circulo >= 4 && circulo > rectangulo + 1) return "circulo"
+
+  return null
+}
+
+/** Detecta subrayado, círculo, rectángulo o trazo libre. */
 export function detectarGestoPizarra(pts: { x: number; y: number }[]): TipoTrazo {
   if (pts.length < 4) return "trazo"
 
@@ -230,26 +379,15 @@ export function detectarGestoPizarra(pts: { x: number; y: number }[]): TipoTrazo
   const height = maxY - minY
   if (width < 15 && height < 15) return "trazo"
 
-  const first = pts[0]
-  const last = pts[pts.length - 1]
-  const distStartEnd = Math.hypot(first.x - last.x, first.y - last.y)
-
-  // Encerrar: trazo cerrado con forma más o menos ovalada
-  if (
-    width > 25 &&
-    height > 25 &&
-    distStartEnd < Math.max(width, height) * 0.4 &&
-    width / height > 0.35 &&
-    width / height < 2.8
-  ) {
-    return "circulo"
-  }
-
-  // Subrayar: trazo horizontal y plano
+  // Subrayar: línea horizontal abierta
   if (width > height * 2 && width > 35) {
     const ySpread = maxY - minY
-    if (ySpread < width * 0.3) return "subrayado"
+    if (ySpread < width * 0.3 && !trazoCerrado(pts, width, height)) return "subrayado"
   }
+
+  const forma = detectarFormaCerrada(pts)
+  if (forma === "circulo") return "circulo"
+  if (forma === "rectangulo") return "rectangulo"
 
   return "trazo"
 }
@@ -272,14 +410,45 @@ export function ptsParaCirculo(pts: { x: number; y: number }[]) {
   ]
 }
 
+export function ptsParaRectangulo(pts: { x: number; y: number }[]) {
+  const { minX, maxX, minY, maxY } = bboxPts(pts)
+  const pad = 4
+  return [
+    { x: minX - pad, y: minY - pad },
+    { x: maxX + pad, y: maxY + pad },
+  ]
+}
+
+/** Trazo muy corto = toque para marcar un punto. */
+export function esTrazoPunto(pts: { x: number; y: number }[]): boolean {
+  if (pts.length <= 1) return true
+  const { minX, maxX, minY, maxY } = bboxPts(pts)
+  return maxX - minX < 14 && maxY - minY < 14
+}
+
+export function ptsParaPunto(pts: { x: number; y: number }[]) {
+  return [pts[0]]
+}
+
 export function resolverTrazoConGesto(
   pts: { x: number; y: number }[],
   herramienta: HerramientaPizarra
 ): { pts: string; tipo: TipoTrazo } {
+  if (
+    (herramienta === "lapiz" || herramienta === "borrador") &&
+    esTrazoPunto(pts)
+  ) {
+    return { pts: ptsAString(ptsParaPunto(pts)), tipo: "punto" }
+  }
   if (herramienta === "subrayar") {
     return { pts: ptsAString(ptsParaSubrayado(pts)), tipo: "subrayado" }
   }
   if (herramienta === "encerrar") {
+    const forma = detectarFormaCerrada(pts)
+    if (forma === "rectangulo") {
+      return { pts: ptsAString(ptsParaRectangulo(pts)), tipo: "rectangulo" }
+    }
+    // Encerrar: círculo por defecto si no es claramente rectángulo
     return { pts: ptsAString(ptsParaCirculo(pts)), tipo: "circulo" }
   }
   if (herramienta === "borrador") {
@@ -292,6 +461,9 @@ export function resolverTrazoConGesto(
   }
   if (tipo === "circulo") {
     return { pts: ptsAString(ptsParaCirculo(pts)), tipo: "circulo" }
+  }
+  if (tipo === "rectangulo") {
+    return { pts: ptsAString(ptsParaRectangulo(pts)), tipo: "rectangulo" }
   }
   return { pts: ptsAString(pts), tipo: "trazo" }
 }
