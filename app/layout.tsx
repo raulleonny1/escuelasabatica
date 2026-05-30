@@ -36,6 +36,7 @@ export const metadata = {
   },
   other: {
     "mobile-web-app-capable": "yes",
+    "google-adsense-account": "ca-pub-6850511900744053",
   },
 }
 
@@ -60,6 +61,12 @@ export default function RootLayout({
         <Script id="es-text-size-boot" strategy="beforeInteractive">
           {textSizeBoot}
         </Script>
+        <Script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6850511900744053"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
         <AppShell>{children}</AppShell>
         <PwaInstallPrompt />
       </body>
