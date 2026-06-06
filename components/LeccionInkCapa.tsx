@@ -10,11 +10,10 @@ import {
   guardarTrazosLeccion,
   interpolarPuntos,
   leerTrazosLeccion,
-  RADIO_BORRADOR_LECCION,
   type TrazoLeccionLocal,
 } from "@/lib/leccionTintaLocal"
 
-const COLOR_LAPIZ = "#b45309"
+const COLOR_LAPIZ = "#92400e"
 const GROSOR_BASE = 4.5
 
 function contornoDesdeTrazo(points: [number, number, number][], size: number) {
@@ -55,30 +54,9 @@ function pintarTrazo(ctx: CanvasRenderingContext2D, trazo: TrazoLeccionLocal) {
   ctx.fill()
 }
 
-function pintarIndicadorBorrador(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number
-) {
-  ctx.save()
-  ctx.strokeStyle = "rgba(30, 58, 95, 0.35)"
-  ctx.fillStyle = "rgba(255, 255, 255, 0.55)"
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.arc(x, y, RADIO_BORRADOR_LECCION, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.stroke()
-  ctx.restore()
-}
-
-function repintar(
-  ctx: CanvasRenderingContext2D,
-  trazos: TrazoLeccionLocal[],
-  borrador?: { x: number; y: number } | null
-) {
+function repintar(ctx: CanvasRenderingContext2D, trazos: TrazoLeccionLocal[]) {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
   for (const t of trazos) pintarTrazo(ctx, t)
-  if (borrador) pintarIndicadorBorrador(ctx, borrador.x, borrador.y)
 }
 
 type Props = {
@@ -95,33 +73,34 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
   const grosorActivo = useRef(GROSOR_BASE)
   const pintando = useRef(false)
   const pointerId = useRef<number | null>(null)
-  const borradorPos = useRef<{ x: number; y: number } | null>(null)
   const modoRef = useRef(modo)
   modoRef.current = modo
 
-  const activo = modo !== null
+  const puedeDibujar = modo !== null
 
   const sincronizarTamano = useCallback(() => {
     const ancla = anclaRef.current
     const canvas = canvasRef.current
     if (!ancla || !canvas) return
-    const w = ancla.scrollWidth
-    const h = ancla.scrollHeight
+
+    const w = Math.max(ancla.scrollWidth, ancla.clientWidth)
+    const h = Math.max(ancla.scrollHeight, ancla.clientHeight)
     if (w <= 0 || h <= 0) return
+
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     canvas.width = Math.floor(w * dpr)
     canvas.height = Math.floor(h * dpr)
     canvas.style.width = `${w}px`
     canvas.style.height = `${h}px`
+
     const ctx = canvas.getContext("2d")
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    repintar(ctx, trazosRef.current, borradorPos.current)
+    repintar(ctx, trazosRef.current)
   }, [anclaRef])
 
   useEffect(() => {
     trazosRef.current = leerTrazosLeccion(semana, fecha)
-    borradorPos.current = null
     sincronizarTamano()
   }, [semana, fecha, sincronizarTamano])
 
@@ -139,16 +118,15 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
 
   const puntoDesdeEvento = useCallback(
     (e: PointerEvent): [number, number, number] | null => {
-      const canvas = canvasRef.current
-      if (!canvas) return null
-      const rect = canvas.getBoundingClientRect()
+      const ancla = anclaRef.current
+      if (!ancla) return null
+      const rect = ancla.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
-      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
       const pressure = e.pressure > 0 && e.pressure <= 1 ? e.pressure : 0.5
       return [x, y, pressure]
     },
-    []
+    [anclaRef]
   )
 
   const puedeInteractuar = useCallback((e: PointerEvent) => {
@@ -165,16 +143,15 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
         trazosRef.current = trazos
         persistir()
       }
-      borradorPos.current = { x, y }
       const ctx = canvasRef.current?.getContext("2d")
-      if (ctx) repintar(ctx, trazosRef.current, borradorPos.current)
+      if (ctx) repintar(ctx, trazosRef.current)
     },
     [persistir]
   )
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas || !activo) return
+    if (!canvas || !puedeDibujar) return
 
     const onPointerDown = (e: PointerEvent) => {
       if (!puedeInteractuar(e)) return
@@ -226,11 +203,7 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       pintando.current = false
       pointerId.current = null
 
-      if (modoRef.current === "borrador") {
-        borradorPos.current = null
-        const ctx = canvas.getContext("2d")
-        if (ctx) repintar(ctx, trazosRef.current)
-      } else {
+      if (modoRef.current !== "borrador") {
         const pts = trazoActivo.current
         trazoActivo.current = []
         if (pts.length >= 1) {
@@ -245,9 +218,10 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
           ]
           persistir()
         }
-        const ctx = canvas.getContext("2d")
-        if (ctx) repintar(ctx, trazosRef.current)
       }
+
+      const ctx = canvas.getContext("2d")
+      if (ctx) repintar(ctx, trazosRef.current)
 
       try {
         canvas.releasePointerCapture(e.pointerId)
@@ -267,12 +241,12 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       canvas.removeEventListener("pointerup", onPointerUp)
       canvas.removeEventListener("pointercancel", onPointerUp)
     }
-  }, [activo, aplicarBorrador, persistir, puedeInteractuar, puntoDesdeEvento])
+  }, [puedeDibujar, aplicarBorrador, persistir, puedeInteractuar, puntoDesdeEvento])
 
   return (
     <canvas
       ref={canvasRef}
-      className={`leccion-ink-capa${activo ? " leccion-ink-capa-activa" : ""}${
+      className={`leccion-ink-capa${puedeDibujar ? " leccion-ink-capa-activa" : ""}${
         modo === "borrador" ? " leccion-ink-capa-borrador" : ""
       }`}
       aria-hidden

@@ -451,6 +451,39 @@ html[data-lectura="1"] .pdf-zoom-bar {
   flex-direction: row;
 }
 
+.leccion-viewer-scroll {
+  background: #faf8f3;
+}
+
+.leccion-lienzo {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  padding: 1rem 0.65rem 3rem;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .leccion-lienzo {
+    padding: 1.25rem 1rem 3rem;
+  }
+}
+
+.leccion-lienzo .leccion-pagina {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.leccion-lienzo .leccion-dia-encabezado {
+  max-width: none;
+}
+
+.leccion-lienzo-tinta {
+  touch-action: pan-y;
+}
+
 .leccion-dias-sidebar {
   display: flex;
   flex-direction: column;
@@ -618,19 +651,12 @@ html[data-lectura="1"] .pdf-zoom-bar {
   pointer-events: none;
 }
 
-.leccion-anotable-lapiz {
-  touch-action: pan-y;
-}
-
-.leccion-anotable-envoltorio {
-  position: relative;
-}
-
 .leccion-ink-capa {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 2;
   pointer-events: none;
+  mix-blend-mode: multiply;
 }
 
 .leccion-ink-capa-activa {
@@ -638,19 +664,15 @@ html[data-lectura="1"] .pdf-zoom-bar {
   touch-action: none;
 }
 
-.leccion-lapiz-aviso {
-  margin: 0 0 0.75rem;
-  padding: 0.45rem 0.65rem;
-  border-radius: 0.5rem;
-  background: rgba(201, 162, 39, 0.12);
-  font-size: 0.78rem;
-  line-height: 1.4;
-  color: #78350f;
+.leccion-lienzo-tinta .leccion-pagina,
+.leccion-lienzo-tinta .leccion-anotable {
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
 }
 
-.leccion-borrador-aviso {
-  background: rgba(244, 114, 182, 0.14);
-  color: #831843;
+.leccion-ink-capa-borrador {
+  cursor: crosshair;
 }
 
 .leccion-herramienta-goma {
@@ -666,10 +688,6 @@ html[data-lectura="1"] .pdf-zoom-bar {
 .leccion-herramienta-borrador-tinta.leccion-herramienta-btn-activa {
   border-color: #db2777;
   box-shadow: 0 0 0 2px rgba(219, 39, 119, 0.22);
-}
-
-.leccion-ink-capa-borrador {
-  cursor: crosshair;
 }
 
 .leccion-anotable mark {

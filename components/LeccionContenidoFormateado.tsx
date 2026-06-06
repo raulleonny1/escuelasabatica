@@ -5,7 +5,6 @@ import { formatearParrafosDia, type BloqueLeccion } from "@/lib/leccionFormato"
 import {
   aplicarHerramientaEnRango,
   esHerramientaResalte,
-  esHerramientaTinta,
   guardarHtmlAnotado,
   leerHtmlAnotado,
   restaurarRango,
@@ -19,7 +18,6 @@ import {
   type SegmentoTexto,
 } from "@/lib/pasajeBiblico"
 import PasajeFlorido from "@/components/PasajeFlorido"
-import LeccionInkCapa from "@/components/LeccionInkCapa"
 import type { PreguntaRespondida } from "@/lib/leccionAuxiliar"
 
 type Props = {
@@ -200,7 +198,6 @@ export default function LeccionContenidoFormateado({
   const [htmlAnotado, setHtmlAnotado] = useState<string | null>(null)
 
   const anotableRef = useRef<HTMLDivElement>(null)
-  const anclaInkRef = useRef<HTMLDivElement>(null)
   const herramientaRef = useRef(herramienta)
   const rangoGuardado = useRef<Range | null>(null)
 
@@ -287,63 +284,33 @@ export default function LeccionContenidoFormateado({
     return <p className="text-center text-sm text-muted">Sin contenido para este día.</p>
   }
 
-  const claseAnotable =
-    esHerramientaResalte(herramienta)
-      ? " leccion-anotable-marcando"
-      : esHerramientaTinta(herramienta)
-        ? " leccion-anotable-lapiz"
-        : ""
-
-  const modoTinta =
-    herramienta === "subrayar" || herramienta === "borrador"
-      ? herramienta
-      : null
+  const claseAnotable = esHerramientaResalte(herramienta) ? " leccion-anotable-marcando" : ""
 
   return (
     <>
       <article className="leccion-pagina">
         {tituloDia && <p className="leccion-dia-encabezado">{tituloDia}</p>}
 
-        {herramienta === "subrayar" && (
-          <p className="leccion-lapiz-aviso" role="status">
-            Dibuja sobre el texto con lápiz o dedo. Toca ↖ Leer para desplazarte.
-          </p>
-        )}
-        {herramienta === "borrador" && (
-          <p className="leccion-lapiz-aviso leccion-borrador-aviso" role="status">
-            Pasa el borrador sobre las rayas para quitarlas. Toca ↖ Leer para desplazarte.
-          </p>
-        )}
-
-        <div ref={anclaInkRef} className="leccion-anotable-envoltorio">
-          <div
-            ref={anotableRef}
-            className={`leccion-anotable${claseAnotable}`}
-            onMouseUp={alSoltarSeleccion}
-            onTouchEnd={alSoltarSeleccion}
-          >
-            {htmlAnotado !== null ? (
-              <div
-                className="leccion-anotable-html"
-                dangerouslySetInnerHTML={{ __html: htmlAnotado }}
-              />
-            ) : (
-              <LeccionCuerpoDia
-                bloques={bloques}
-                resumenLimpio={resumenLimpio}
-                segmentosResumen={segmentosResumen}
-                preguntas={preguntas}
-                onPasaje={abrirPasaje}
-              />
-            )}
-          </div>
-
-          <LeccionInkCapa
-            semana={semana}
-            fecha={fecha}
-            modo={modoTinta}
-            anclaRef={anclaInkRef}
-          />
+        <div
+          ref={anotableRef}
+          className={`leccion-anotable${claseAnotable}`}
+          onMouseUp={alSoltarSeleccion}
+          onTouchEnd={alSoltarSeleccion}
+        >
+          {htmlAnotado !== null ? (
+            <div
+              className="leccion-anotable-html"
+              dangerouslySetInnerHTML={{ __html: htmlAnotado }}
+            />
+          ) : (
+            <LeccionCuerpoDia
+              bloques={bloques}
+              resumenLimpio={resumenLimpio}
+              segmentosResumen={segmentosResumen}
+              preguntas={preguntas}
+              onPasaje={abrirPasaje}
+            />
+          )}
         </div>
       </article>
       <PasajeFlorido pasaje={pasajeActivo} onCerrar={() => setPasajeActivo(null)} />

@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { getFechaDestacadaEnSemana, getFechasSemana } from "@/lib/semana"
 import LeccionContenidoFormateado from "@/components/LeccionContenidoFormateado"
 import LeccionBarraEdicion from "@/components/LeccionBarraEdicion"
-import type { HerramientaLeccion } from "@/lib/leccionAnotaciones"
+import LeccionInkCapa from "@/components/LeccionInkCapa"
+import { esHerramientaTinta, type HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
   cargarSemanaCompleta,
   diaTieneContenido,
@@ -30,6 +31,10 @@ export default function LeccionTextoViewer({
   const [error, setError] = useState<string | null>(null)
   const [herramienta, setHerramienta] = useState<HerramientaLeccion>("cursor")
   const contenidoRef = useRef<HTMLDivElement>(null)
+  const lienzoRef = useRef<HTMLDivElement>(null)
+
+  const modoTinta =
+    herramienta === "subrayar" || herramienta === "borrador" ? herramienta : null
 
   const fechasSemana = getFechasSemana(semana)
 
@@ -124,21 +129,32 @@ export default function LeccionTextoViewer({
 
       <div
         ref={contenidoRef}
-        className="custom-scroll min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-4 md:px-6 md:py-5"
+        className="leccion-viewer-scroll custom-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
       >
         {diaActivo && diaTieneContenido(diaActivo) ? (
-          <LeccionContenidoFormateado
-            key={`${semana}-${fechaActiva}`}
-            semana={semana}
-            fecha={fechaActiva}
-            tituloDia={diaActivo.titulo || diaActivo.etiqueta}
-            parrafos={parrafosDia}
-            resumen={diaActivo.resumen}
-            preguntas={diaActivo.preguntas}
-            herramienta={herramienta}
-          />
+          <div
+            ref={lienzoRef}
+            className={`leccion-lienzo${esHerramientaTinta(herramienta) ? " leccion-lienzo-tinta" : ""}`}
+          >
+            <LeccionContenidoFormateado
+              key={`${semana}-${fechaActiva}`}
+              semana={semana}
+              fecha={fechaActiva}
+              tituloDia={diaActivo.titulo || diaActivo.etiqueta}
+              parrafos={parrafosDia}
+              resumen={diaActivo.resumen}
+              preguntas={diaActivo.preguntas}
+              herramienta={herramienta}
+            />
+            <LeccionInkCapa
+              semana={semana}
+              fecha={fechaActiva}
+              modo={modoTinta}
+              anclaRef={lienzoRef}
+            />
+          </div>
         ) : (
-          <p className="text-center text-sm text-muted">
+          <p className="p-6 text-center text-sm text-muted">
             No hay contenido para este día en la semana {semana}.
           </p>
         )}
