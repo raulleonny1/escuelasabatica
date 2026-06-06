@@ -1,6 +1,7 @@
 import type { PDFDocumentProxy } from "pdfjs-dist"
 import { getFechasSemana, type DiaSemana } from "@/lib/semana"
 import { getTerminosBusquedaDia } from "@/lib/leccionPdf"
+import { resolverUrlPdf, revocarUrlPdfBlob } from "@/lib/offlinePdf"
 
 export type DiaLeccionTexto = {
   fecha: string
@@ -278,12 +279,20 @@ export async function cargarLeccionPorDias(
 ): Promise<DiaLeccionTexto[]> {
   let parrafos = leerParrafosLeccionCacheados(url)
   if (!parrafos) {
-    const pdfjs = await import("pdfjs-dist")
-    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js"
-    const doc = await pdfjs.getDocument(url).promise
-    parrafos = await extraerParrafosPdf(doc)
-    await doc.destroy().catch(() => {})
-    cacheParrafos.set(url, parrafos)
+    let src = url
+    try {
+      const pdfjs = await import("pdfjs-dist")
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js"
+      src = await resolverUrlPdf(url)
+      const doc = await pdfjs.getDocument(src).promise
+      parrafos = await extraerParrafosPdf(doc)
+      await doc.destroy().catch(() => {})
+      revocarUrlPdfBlob(src)
+      cacheParrafos.set(url, parrafos)
+    } catch {
+      revocarUrlPdfBlob(src)
+      throw new Error(`No se pudo leer el PDF: ${url}`)
+    }
   }
   return dividirParrafosPorDias(parrafos, semana)
 }

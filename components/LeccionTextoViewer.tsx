@@ -7,10 +7,15 @@ import LeccionBarraEdicion from "@/components/LeccionBarraEdicion"
 import LeccionInkCapa from "@/components/LeccionInkCapa"
 import { esHerramientaTinta, type HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
-  cargarSemanaCompleta,
   diaTieneContenido,
   type DiaLeccionCompleto,
 } from "@/lib/leccionAuxiliar"
+import {
+  cargarSemanaConOffline,
+  descargarSemanaParaOffline,
+  semanaDisponibleOffline,
+} from "@/lib/leccionOffline"
+import { hayConexion } from "@/lib/syncCola"
 
 type Props = {
   semana: number
@@ -29,6 +34,7 @@ export default function LeccionTextoViewer({
   )
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [offlineLista, setOfflineLista] = useState<boolean | null>(null)
   const [herramienta, setHerramienta] = useState<HerramientaLeccion>("cursor")
   const contenidoRef = useRef<HTMLDivElement>(null)
   const lienzoRef = useRef<HTMLDivElement>(null)
@@ -47,11 +53,12 @@ export default function LeccionTextoViewer({
     setCargando(true)
     setError(null)
 
-    void cargarSemanaCompleta(semana)
+    void cargarSemanaConOffline(semana)
       .then((bloques) => {
         if (cancelado) return
         setDias(bloques)
         setCargando(false)
+        setError(null)
       })
       .catch((e) => {
         if (cancelado) return
@@ -59,9 +66,20 @@ export default function LeccionTextoViewer({
         setCargando(false)
       })
 
+    void semanaDisponibleOffline(semana).then((ok) => {
+      if (!cancelado) setOfflineLista(ok)
+    })
+
     return () => {
       cancelado = true
     }
+  }, [semana])
+
+  useEffect(() => {
+    if (!hayConexion()) return
+    void descargarSemanaParaOffline(semana)
+      .then(() => setOfflineLista(true))
+      .catch(() => {})
   }, [semana])
 
   const seleccionarDia = useCallback(
@@ -131,6 +149,11 @@ export default function LeccionTextoViewer({
         ref={contenidoRef}
         className="leccion-viewer-scroll custom-scroll min-h-0 min-w-0 flex-1 overflow-y-auto"
       >
+        {!hayConexion() && offlineLista && (
+          <p className="leccion-offline-aviso" role="status">
+            Sin internet — leyendo semana guardada en este dispositivo.
+          </p>
+        )}
         {diaActivo && diaTieneContenido(diaActivo) ? (
           <div
             ref={lienzoRef}

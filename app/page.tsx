@@ -41,6 +41,13 @@ import {
   getSemanaActual,
 } from "@/lib/semana"
 import { getPdfUrl, semanaTieneLeccion } from "@/lib/pdfUrls"
+import { descargarSemanaParaOffline } from "@/lib/leccionOffline"
+import {
+  encolarEliminarComentario,
+  encolarGuardarComentario,
+  hayConexion,
+  iniciarSyncAutomatica,
+} from "@/lib/syncCola"
 import {
   anunciarEntradaChat,
   getChatSessionId,
@@ -230,6 +237,17 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
+    return iniciarSyncAutomatica((n) => {
+      if (n > 0) setSyncError(null)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!hayConexion()) return
+    void descargarSemanaParaOffline(semana).catch(() => {})
+  }, [semana])
+
+  useEffect(() => {
     if (!claseId) {
       setCargandoClase(false)
       return
@@ -416,26 +434,29 @@ export default function Home() {
   async function handleGuardarComentario(fecha: string, texto: string) {
     if (!claseId || !chatNombre) return
     setGuardando(true)
+    const nota: NotaClase = { texto: texto.trim(), autor: chatNombre, semana }
+    const docId = idDocumentoComentario(fecha, chatNombre)
+
+    setNotasClase((prev) => {
+      const n = { ...prev, [docId]: nota }
+      guardarComentariosClaseLocal(claseId, n)
+      return n
+    })
+    setComentario(texto.trim())
+
+    if (!hayConexion()) {
+      await encolarGuardarComentario(claseId, fecha, texto, chatNombre, semana)
+      setSyncError("Sin internet. Nota guardada aquí — se enviará al conectar.")
+      setGuardando(false)
+      return
+    }
+
     try {
       await guardarComentarioClase(claseId, fecha, texto, chatNombre, semana)
-      const nota: NotaClase = { texto: texto.trim(), autor: chatNombre, semana }
-      const docId = idDocumentoComentario(fecha, chatNombre)
-      setNotasClase((prev) => {
-        const n = { ...prev, [docId]: nota }
-        guardarComentariosClaseLocal(claseId, n)
-        return n
-      })
-      setComentario(texto.trim())
       setSyncError(null)
     } catch {
-      const nota: NotaClase = { texto: texto.trim(), autor: chatNombre, semana }
-      const docId = idDocumentoComentario(fecha, chatNombre)
-      setNotasClase((prev) => {
-        const n = { ...prev, [docId]: nota }
-        guardarComentariosClaseLocal(claseId, n)
-        return n
-      })
-      setSyncError("No se pudo sincronizar. Guardado en caché de este dispositivo.")
+      await encolarGuardarComentario(claseId, fecha, texto, chatNombre, semana)
+      setSyncError("No se pudo sincronizar. Guardado aquí — se enviará al conectar.")
     } finally {
       setGuardando(false)
     }
@@ -444,26 +465,29 @@ export default function Home() {
   async function handleEliminarComentario(fecha: string) {
     if (!claseId || !chatNombre) return
     setGuardando(true)
+    const docId = idDocumentoComentario(fecha, chatNombre)
+
+    setNotasClase((prev) => {
+      const n = { ...prev }
+      delete n[docId]
+      guardarComentariosClaseLocal(claseId, n)
+      return n
+    })
+    if (selectedDate === fecha) setComentario("")
+
+    if (!hayConexion()) {
+      await encolarEliminarComentario(claseId, fecha, chatNombre)
+      setSyncError("Sin internet. Cambio guardado aquí — se sincronizará al conectar.")
+      setGuardando(false)
+      return
+    }
+
     try {
       await eliminarComentarioClase(claseId, fecha, chatNombre)
-      const docId = idDocumentoComentario(fecha, chatNombre)
-      setNotasClase((prev) => {
-        const n = { ...prev }
-        delete n[docId]
-        guardarComentariosClaseLocal(claseId, n)
-        return n
-      })
-      if (selectedDate === fecha) setComentario("")
       setSyncError(null)
     } catch {
-      const docId = idDocumentoComentario(fecha, chatNombre)
-      setNotasClase((prev) => {
-        const n = { ...prev }
-        delete n[docId]
-        guardarComentariosClaseLocal(claseId, n)
-        return n
-      })
-      setSyncError("No se pudo eliminar en la nube.")
+      await encolarEliminarComentario(claseId, fecha, chatNombre)
+      setSyncError("No se pudo eliminar en la nube. Se reintentará al conectar.")
     } finally {
       setGuardando(false)
     }

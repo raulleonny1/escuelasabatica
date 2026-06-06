@@ -1,5 +1,6 @@
 import { getPdfUrl } from "@/lib/pdfUrls"
 import { cargarLeccionPorDias, extraerParrafosPdf, type DiaLeccionTexto } from "@/lib/leccionTexto"
+import { resolverUrlPdf, revocarUrlPdfBlob } from "@/lib/offlinePdf"
 
 export type PreguntaRespondida = {
   numero?: string
@@ -13,15 +14,19 @@ const cacheParrafos = new Map<string, string[]>()
 async function cargarParrafosPdf(url: string): Promise<string[] | null> {
   const cacheado = cacheParrafos.get(url)
   if (cacheado) return cacheado
+  let src = url
   try {
     const pdfjs = await import("pdfjs-dist")
     pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js"
-    const doc = await pdfjs.getDocument(url).promise
+    src = await resolverUrlPdf(url)
+    const doc = await pdfjs.getDocument(src).promise
     const parrafos = await extraerParrafosPdf(doc)
     await doc.destroy().catch(() => {})
+    revocarUrlPdfBlob(src)
     cacheParrafos.set(url, parrafos)
     return parrafos
   } catch {
+    revocarUrlPdfBlob(src)
     return null
   }
 }
@@ -224,7 +229,7 @@ export type DiaLeccionCompleto = DiaLeccionTexto & {
   preguntas: PreguntaRespondida[]
 }
 
-export async function cargarSemanaCompleta(semana: number): Promise<DiaLeccionCompleto[]> {
+export async function cargarSemanaCompletaDesdeRed(semana: number): Promise<DiaLeccionCompleto[]> {
   const [diasLeccion, parrafosResumen, parrafosPreguntas] = await Promise.all([
     cargarLeccionPorDias(getPdfUrl(semana, "leccion"), semana),
     cargarParrafosPdf(getPdfUrl(semana, "resumen")),

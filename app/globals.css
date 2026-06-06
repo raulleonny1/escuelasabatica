@@ -455,6 +455,17 @@ html[data-lectura="1"] .pdf-zoom-bar {
   background: #faf8f3;
 }
 
+.leccion-offline-aviso {
+  margin: 0 0 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.5rem;
+  background: rgba(30, 58, 95, 0.08);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #334155;
+  text-align: center;
+}
+
 .leccion-lienzo {
   position: relative;
   width: 100%;
