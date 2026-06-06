@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getFechaDestacadaEnSemana, getFechasSemana } from "@/lib/semana"
 import LeccionContenidoFormateado from "@/components/LeccionContenidoFormateado"
+import LeccionBarraEdicion from "@/components/LeccionBarraEdicion"
+import type { HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
   cargarSemanaCompleta,
   diaTieneContenido,
@@ -26,6 +28,7 @@ export default function LeccionTextoViewer({
   )
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [herramienta, setHerramienta] = useState<HerramientaLeccion>("cursor")
   const contenidoRef = useRef<HTMLDivElement>(null)
 
   const fechasSemana = getFechasSemana(semana)
@@ -65,6 +68,10 @@ export default function LeccionTextoViewer({
     [onFechaChange]
   )
 
+  const enfocarNota = useCallback(() => {
+    contenidoRef.current?.scrollTo({ top: contenidoRef.current.scrollHeight, behavior: "smooth" })
+  }, [])
+
   const diaActivo = dias.find((d) => d.fecha === fechaActiva) ?? dias[0]
 
   const parrafosDia =
@@ -94,7 +101,6 @@ export default function LeccionTextoViewer({
 
   return (
     <div className="leccion-viewer flex h-full min-h-0 bg-[#faf8f3]">
-      {/* Botones por día — barra lateral */}
       <aside className="leccion-dias-sidebar shrink-0 border-r border-border bg-white/95">
         <p className="leccion-dias-sidebar-titulo">Semana {semana}</p>
         <nav className="leccion-dias-nav custom-scroll" aria-label="Días de la semana">
@@ -116,19 +122,25 @@ export default function LeccionTextoViewer({
             )
           })}
         </nav>
+
+        <LeccionBarraEdicion herramienta={herramienta} onHerramienta={setHerramienta} />
       </aside>
 
-      {/* Contenido del día seleccionado */}
       <div
         ref={contenidoRef}
         className="custom-scroll min-h-0 min-w-0 flex-1 overflow-y-auto px-3 py-4 md:px-6 md:py-5"
       >
         {diaActivo && diaTieneContenido(diaActivo) ? (
           <LeccionContenidoFormateado
+            key={`${semana}-${fechaActiva}`}
+            semana={semana}
+            fecha={fechaActiva}
             tituloDia={diaActivo.titulo || diaActivo.etiqueta}
             parrafos={parrafosDia}
             resumen={diaActivo.resumen}
             preguntas={diaActivo.preguntas}
+            herramienta={herramienta}
+            onEnfocarNota={enfocarNota}
           />
         ) : (
           <p className="text-center text-sm text-muted">

@@ -15,7 +15,7 @@ import {
   type NotaClase,
 } from "@/lib/comentarios"
 import { esModoIndependiente, guardarClaseLocal, unirseAClase } from "@/lib/clase"
-import { marcarGrupoEnEstudio, quitarGrupoEnEstudio } from "@/lib/gruposEnEstudio"
+import { marcarGrupoEnEstudio, pulsoGrupoEnEstudio, INTERVALO_PULSO_GRUPO_MS } from "@/lib/gruposEnEstudio"
 import { guardarSesion, leerSesion, type SesionUsuario } from "@/lib/sesionUsuario"
 import { IR_MENU_PRINCIPAL_EVENT } from "@/lib/navegacion"
 import {
@@ -363,30 +363,47 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!esMaestro || !claseId || !chatNombre) return
+    if (modoIndependiente || !claseId || !chatNombre) return
 
     const dias = getFechasSemana(semana)
     const dia = dias.find((d) => d.fecha === selectedDate)
     const diaLabel = dia ? `${dia.diaCorto} ${dia.diaNum} ${dia.mesCorto}` : selectedDate
 
-    const datos = {
-      nombreClase: claseNombre,
-      maestroNombre: chatNombre,
-      semana,
-      fecha: selectedDate,
-      diaLabel,
+    const enviarPulso = () => {
+      if (esMaestro) {
+        void marcarGrupoEnEstudio(claseId, {
+          nombreClase: claseNombre,
+          maestroNombre: chatNombre,
+          semana,
+          fecha: selectedDate,
+          diaLabel,
+        })
+      } else {
+        void pulsoGrupoEnEstudio(claseId)
+      }
     }
 
-    void marcarGrupoEnEstudio(claseId, datos)
-    const id = window.setInterval(() => {
-      void marcarGrupoEnEstudio(claseId, datos)
-    }, 60_000)
+    enviarPulso()
+    const id = window.setInterval(enviarPulso, INTERVALO_PULSO_GRUPO_MS)
+
+    const alOcultar = () => {
+      if (document.visibilityState === "hidden") enviarPulso()
+    }
+    document.addEventListener("visibilitychange", alOcultar)
 
     return () => {
       window.clearInterval(id)
-      void quitarGrupoEnEstudio(claseId)
+      document.removeEventListener("visibilitychange", alOcultar)
     }
-  }, [esMaestro, claseId, chatNombre, claseNombre, semana, selectedDate])
+  }, [
+    modoIndependiente,
+    esMaestro,
+    claseId,
+    chatNombre,
+    claseNombre,
+    semana,
+    selectedDate,
+  ])
 
   function handleEntrarSesion(nueva: SesionUsuario) {
     guardarNombreChat(nueva.nombre)

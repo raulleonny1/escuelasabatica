@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import type { GrupoEnEstudio } from "@/lib/gruposEnEstudio"
-import { subscribeGruposEnEstudio } from "@/lib/gruposEnEstudio"
+import { subscribeGruposEnEstudio, type GrupoEnEstudio } from "@/lib/gruposEnEstudio"
 import {
   crearSolicitudUnion,
   subscribeMiSolicitudUnion,
@@ -24,9 +23,20 @@ export default function UnirseAGrupoIndependiente({
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
+  const [conectandoLista, setConectandoLista] = useState(true)
   const unidoRef = useRef(false)
 
-  useEffect(() => subscribeGruposEnEstudio(setGrupos), [])
+  useEffect(
+    () =>
+      subscribeGruposEnEstudio(
+        (lista) => {
+          setGrupos(lista)
+          setConectandoLista(false)
+        },
+        () => setConectandoLista(false)
+      ),
+    []
+  )
 
   useEffect(() => {
     if (!claseSolicitada || !nombre.trim()) {
@@ -85,6 +95,14 @@ export default function UnirseAGrupoIndependiente({
         <p className="mt-1 text-sm text-amber-950">
           {mensaje || "El maestro verá tu nombre y decidirá si te acepta en el grupo."}
         </p>
+      </div>
+    )
+  }
+
+  if (conectandoLista && grupos.length === 0) {
+    return (
+      <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+        <p className="text-[11px] text-slate-500">Buscando grupos en estudio…</p>
       </div>
     )
   }
