@@ -1,5 +1,4 @@
 const PREFIJO_HTML = "leccion-anot-html"
-const PREFIJO_NOTA = "leccion-anot-nota"
 
 export type HerramientaLeccion =
   | "cursor"
@@ -8,7 +7,7 @@ export type HerramientaLeccion =
   | "azul"
   | "rosa"
   | "negrilla"
-  | "nota"
+  | "subrayar"
   | "borrar"
 
 export const HERRAMIENTAS_RESALTE: {
@@ -22,7 +21,7 @@ export const HERRAMIENTAS_RESALTE: {
   { id: "azul", titulo: "Azul", color: "#bfdbfe" },
   { id: "rosa", titulo: "Rosa", color: "#fbcfe8" },
   { id: "negrilla", titulo: "Negrilla" },
-  { id: "nota", titulo: "Escribir" },
+  { id: "subrayar", titulo: "Subrayar" },
   { id: "borrar", titulo: "Quitar" },
 ]
 
@@ -40,18 +39,6 @@ export function guardarHtmlAnotado(semana: number, fecha: string, html: string) 
   const key = `${PREFIJO_HTML}-${clave(semana, fecha)}`
   if (!html.trim()) localStorage.removeItem(key)
   else localStorage.setItem(key, html)
-}
-
-export function leerNotaEscrita(semana: number, fecha: string): string {
-  if (typeof window === "undefined") return ""
-  return localStorage.getItem(`${PREFIJO_NOTA}-${clave(semana, fecha)}`) ?? ""
-}
-
-export function guardarNotaEscrita(semana: number, fecha: string, texto: string) {
-  if (typeof window === "undefined") return
-  const key = `${PREFIJO_NOTA}-${clave(semana, fecha)}`
-  if (!texto.trim()) localStorage.removeItem(key)
-  else localStorage.setItem(key, texto)
 }
 
 /** Envuelve la selección actual en un elemento (resiste rangos parciales). */
@@ -91,7 +78,9 @@ export function quitarResalteSeleccion(): boolean {
   const contenedor = elemento.closest(".leccion-anotable")
   if (!contenedor) return false
 
-  const marks = contenedor.querySelectorAll("mark, strong.leccion-resalte-negrilla")
+  const marks = contenedor.querySelectorAll(
+    "mark, strong.leccion-resalte-negrilla, u.leccion-resalte-subrayar"
+  )
   let quitados = 0
   marks.forEach((node) => {
     if (!range.intersectsNode(node)) return
@@ -107,10 +96,13 @@ export function quitarResalteSeleccion(): boolean {
 }
 
 export function aplicarHerramienta(herramienta: HerramientaLeccion): boolean {
-  if (herramienta === "cursor" || herramienta === "nota") return false
+  if (herramienta === "cursor") return false
   if (herramienta === "borrar") return quitarResalteSeleccion()
   if (herramienta === "negrilla") {
     return envolverSeleccion("strong", "leccion-resalte-negrilla")
+  }
+  if (herramienta === "subrayar") {
+    return envolverSeleccion("u", "leccion-resalte-subrayar")
   }
   return envolverSeleccion("mark", `leccion-resalte-${herramienta}`)
 }

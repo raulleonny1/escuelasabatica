@@ -12,7 +12,7 @@ type Props = {
 
 export default function LeccionBarraEdicion({ herramienta, onHerramienta }: Props) {
   return (
-    <div className="leccion-barra-edicion" role="toolbar" aria-label="Resaltar y escribir">
+    <div className="leccion-barra-edicion" role="toolbar" aria-label="Resaltar en la lección">
       <p className="leccion-barra-edicion-titulo">Marcar</p>
       {HERRAMIENTAS_RESALTE.map((t) => (
         <button
@@ -25,7 +25,7 @@ export default function LeccionBarraEdicion({ herramienta, onHerramienta }: Prop
           className={`leccion-herramienta-btn${
             herramienta === t.id ? " leccion-herramienta-btn-activa" : ""
           }${t.id === "negrilla" ? " leccion-herramienta-negrilla" : ""}${
-            t.id === "nota" ? " leccion-herramienta-nota" : ""
+            t.id === "subrayar" ? " leccion-herramienta-subrayar" : ""
           }${t.id === "borrar" ? " leccion-herramienta-borrar" : ""}${
             t.id === "cursor" ? " leccion-herramienta-cursor" : ""
           }`}
@@ -40,7 +40,7 @@ export default function LeccionBarraEdicion({ herramienta, onHerramienta }: Prop
             <span className="leccion-herramienta-icono" aria-hidden>
               B
             </span>
-          ) : t.id === "nota" ? (
+          ) : t.id === "subrayar" ? (
             <span className="leccion-herramienta-icono" aria-hidden>
               ✎
             </span>

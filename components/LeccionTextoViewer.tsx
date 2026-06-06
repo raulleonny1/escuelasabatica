@@ -68,10 +68,6 @@ export default function LeccionTextoViewer({
     [onFechaChange]
   )
 
-  const enfocarNota = useCallback(() => {
-    contenidoRef.current?.scrollTo({ top: contenidoRef.current.scrollHeight, behavior: "smooth" })
-  }, [])
-
   const diaActivo = dias.find((d) => d.fecha === fechaActiva) ?? dias[0]
 
   const parrafosDia =
@@ -140,7 +136,6 @@ export default function LeccionTextoViewer({
             resumen={diaActivo.resumen}
             preguntas={diaActivo.preguntas}
             herramienta={herramienta}
-            onEnfocarNota={enfocarNota}
           />
         ) : (
           <p className="text-center text-sm text-muted">

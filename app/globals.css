@@ -638,41 +638,11 @@ html[data-lectura="1"] .pdf-zoom-bar {
   font-weight: 700;
 }
 
-.leccion-apunte-escrito {
-  margin-top: 2rem;
-  padding-top: 1.25rem;
-  border-top: 1px dashed rgba(30, 58, 95, 0.15);
-}
-
-.leccion-apunte-escrito-activo {
-  border-top-color: var(--color-accent);
-  background: linear-gradient(180deg, rgba(201, 162, 39, 0.06), transparent);
-  margin-left: -0.5rem;
-  margin-right: -0.5rem;
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
-  border-radius: 0.5rem;
-}
-
-.leccion-apunte-textarea {
-  width: 100%;
-  margin-top: 0.5rem;
-  padding: 0.75rem 0.85rem;
-  border-radius: 0.65rem;
-  border: 1px solid var(--color-border);
-  background: #fffef8;
-  font-family: var(--font-body);
-  font-size: 0.98rem;
-  line-height: 1.65;
-  color: #334155;
-  resize: vertical;
-  min-height: 5rem;
-}
-
-.leccion-apunte-textarea:focus {
-  outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 2px rgba(201, 162, 39, 0.25);
+.leccion-resalte-subrayar {
+  text-decoration: underline;
+  text-decoration-color: #c9a227;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .leccion-resumen-dia {
