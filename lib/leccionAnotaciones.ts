@@ -21,7 +21,7 @@ export const HERRAMIENTAS_RESALTE: {
   { id: "azul", titulo: "Azul", color: "#bfdbfe" },
   { id: "rosa", titulo: "Rosa", color: "#fbcfe8" },
   { id: "negrilla", titulo: "Negrilla" },
-  { id: "subrayar", titulo: "Subrayar" },
+  { id: "subrayar", titulo: "Lápiz" },
   { id: "borrar", titulo: "Quitar" },
 ]
 
@@ -41,12 +41,12 @@ export function guardarHtmlAnotado(semana: number, fecha: string, html: string) 
   else localStorage.setItem(key, html)
 }
 
-/** Envuelve la selección actual en un elemento (resiste rangos parciales). */
-export function envolverSeleccion(tag: string, className: string): boolean {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false
+export function esHerramientaResalte(h: HerramientaLeccion): boolean {
+  return h !== "cursor" && h !== "subrayar"
+}
 
-  const range = sel.getRangeAt(0)
+/** Envuelve un rango en un elemento (resiste rangos parciales). */
+export function envolverRango(tag: string, className: string, range: Range): boolean {
   const el = document.createElement(tag)
   if (className) el.className = className
 
@@ -58,26 +58,11 @@ export function envolverSeleccion(tag: string, className: string): boolean {
     range.insertNode(el)
   }
 
-  sel.removeAllRanges()
   return true
 }
 
-/** Quita marcas y negrillas dentro del rango seleccionado. */
-export function quitarResalteSeleccion(): boolean {
-  const sel = window.getSelection()
-  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false
-
-  const range = sel.getRangeAt(0)
-  const root = range.commonAncestorContainer
-  const elemento =
-    root.nodeType === Node.ELEMENT_NODE
-      ? (root as Element)
-      : root.parentElement
-  if (!elemento) return false
-
-  const contenedor = elemento.closest(".leccion-anotable")
-  if (!contenedor) return false
-
+/** Quita marcas y negrillas dentro del rango. */
+export function quitarResalteEnRango(range: Range, contenedor: Element): boolean {
   const marks = contenedor.querySelectorAll(
     "mark, strong.leccion-resalte-negrilla, u.leccion-resalte-subrayar"
   )
@@ -90,19 +75,51 @@ export function quitarResalteSeleccion(): boolean {
     padre.removeChild(node)
     quitados++
   })
-
-  sel.removeAllRanges()
   return quitados > 0
 }
 
-export function aplicarHerramienta(herramienta: HerramientaLeccion): boolean {
-  if (herramienta === "cursor") return false
-  if (herramienta === "borrar") return quitarResalteSeleccion()
+export function aplicarHerramientaEnRango(
+  herramienta: HerramientaLeccion,
+  range: Range,
+  contenedor: Element
+): boolean {
+  if (herramienta === "cursor" || herramienta === "subrayar") return false
+  if (herramienta === "borrar") return quitarResalteEnRango(range, contenedor)
   if (herramienta === "negrilla") {
-    return envolverSeleccion("strong", "leccion-resalte-negrilla")
+    return envolverRango("strong", "leccion-resalte-negrilla", range)
   }
-  if (herramienta === "subrayar") {
-    return envolverSeleccion("u", "leccion-resalte-subrayar")
-  }
-  return envolverSeleccion("mark", `leccion-resalte-${herramienta}`)
+  return envolverRango("mark", `leccion-resalte-${herramienta}`, range)
+}
+
+export function rangoDentroDe(contenedor: Element, range: Range): boolean {
+  return (
+    contenedor.contains(range.startContainer) &&
+    contenedor.contains(range.endContainer)
+  )
+}
+
+export function clonarRangoSeleccion(): Range | null {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
+  return sel.getRangeAt(0).cloneRange()
+}
+
+export function restaurarRango(range: Range) {
+  const sel = window.getSelection()
+  if (!sel) return
+  sel.removeAllRanges()
+  sel.addRange(range)
+}
+
+export function aplicarHerramienta(herramienta: HerramientaLeccion): boolean {
+  const range = clonarRangoSeleccion()
+  if (!range) return false
+  const root = range.commonAncestorContainer
+  const elemento =
+    root.nodeType === Node.ELEMENT_NODE ? (root as Element) : root.parentElement
+  const contenedor = elemento?.closest(".leccion-anotable")
+  if (!contenedor) return false
+  const ok = aplicarHerramientaEnRango(herramienta, range, contenedor)
+  window.getSelection()?.removeAllRanges()
+  return ok
 }

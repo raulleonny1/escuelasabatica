@@ -1,11 +1,14 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { formatearParrafosDia, type BloqueLeccion } from "@/lib/leccionFormato"
 import {
-  aplicarHerramienta,
+  aplicarHerramientaEnRango,
+  esHerramientaResalte,
   guardarHtmlAnotado,
   leerHtmlAnotado,
+  restaurarRango,
+  rangoDentroDe,
   type HerramientaLeccion,
 } from "@/lib/leccionAnotaciones"
 import {
@@ -15,6 +18,7 @@ import {
   type SegmentoTexto,
 } from "@/lib/pasajeBiblico"
 import PasajeFlorido from "@/components/PasajeFlorido"
+import LeccionInkCapa from "@/components/LeccionInkCapa"
 import type { PreguntaRespondida } from "@/lib/leccionAuxiliar"
 
 type Props = {
@@ -102,6 +106,79 @@ function Bloque({
   }
 }
 
+const LeccionCuerpoDia = memo(function LeccionCuerpoDia({
+  bloques,
+  resumenLimpio,
+  segmentosResumen,
+  preguntas,
+  onPasaje,
+}: {
+  bloques: BloqueLeccion[]
+  resumenLimpio: string
+  segmentosResumen: SegmentoTexto[]
+  preguntas: PreguntaRespondida[]
+  onPasaje: (ref: ReferenciaBiblica) => void
+}) {
+  return (
+    <>
+      {bloques.length > 0 && (
+        <div className="leccion-formato">
+          {bloques.map((bloque, i) => (
+            <Bloque key={i} bloque={bloque} onPasaje={onPasaje} />
+          ))}
+        </div>
+      )}
+
+      {resumenLimpio && (
+        <section className="leccion-bloque-dia" aria-label="Resumen del día">
+          <h3 className="leccion-titulo-seccion">
+            <span className="leccion-titulo-linea" aria-hidden />
+            Resumen del día
+          </h3>
+          <p className="leccion-parrafo leccion-parrafo-inicial leccion-resumen-dia">
+            <SegmentosInline segmentos={segmentosResumen} onPasaje={onPasaje} />
+          </p>
+        </section>
+      )}
+
+      {preguntas.length > 0 && (
+        <section className="leccion-bloque-dia" aria-label="Preguntas con respuestas">
+          <h3 className="leccion-titulo-seccion">
+            <span className="leccion-titulo-linea" aria-hidden />
+            Preguntas con respuestas
+          </h3>
+          <div className="leccion-preguntas-respondidas">
+            {preguntas.map((p, i) => {
+              const segmentosP = segmentarConPasajes(p.pregunta)
+              const segmentosR = p.respuesta ? segmentarConPasajes(p.respuesta) : []
+              return (
+                <div key={i} className="leccion-qa">
+                  <p className="leccion-qa-pregunta">
+                    {p.numero && <span className="leccion-qa-num">{p.numero}. </span>}
+                    <SegmentosInline segmentos={segmentosP} onPasaje={onPasaje} />
+                  </p>
+                  {p.respuesta && (
+                    <p className="leccion-qa-respuesta">
+                      <span className="leccion-qa-respuesta-etq">Respuesta: </span>
+                      <SegmentosInline segmentos={segmentosR} onPasaje={onPasaje} />
+                    </p>
+                  )}
+                  {p.pasajes && (
+                    <p className="leccion-qa-pasajes">
+                      <span className="leccion-qa-pasajes-etq">Pasajes bíblicos:</span>{" "}
+                      {p.pasajes}
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+    </>
+  )
+})
+
 export default function LeccionContenidoFormateado({
   semana,
   fecha,
@@ -111,135 +188,151 @@ export default function LeccionContenidoFormateado({
   preguntas = [],
   herramienta,
 }: Props) {
-  const bloques = formatearParrafosDia(parrafos)
-  const [pasajeActivo, setPasajeActivo] = useState<ReferenciaBiblica | null>(null)
-  const anotableRef = useRef<HTMLDivElement>(null)
-  const htmlRestaurado = useRef(false)
-
-  const abrirPasaje = useCallback((ref: ReferenciaBiblica) => {
-    if (herramienta !== "cursor") return
-    setPasajeActivo(ref)
-  }, [herramienta])
-
+  const bloques = useMemo(() => formatearParrafosDia(parrafos), [parrafos])
   const resumenLimpio = resumen.trim()
-  const segmentosResumen = resumenLimpio ? segmentarConPasajes(resumenLimpio) : []
+  const segmentosResumen = useMemo(
+    () => (resumenLimpio ? segmentarConPasajes(resumenLimpio) : []),
+    [resumenLimpio]
+  )
+
+  const [pasajeActivo, setPasajeActivo] = useState<ReferenciaBiblica | null>(null)
+  const [htmlAnotado, setHtmlAnotado] = useState<string | null>(null)
+
+  const anotableRef = useRef<HTMLDivElement>(null)
+  const anclaInkRef = useRef<HTMLDivElement>(null)
+  const herramientaRef = useRef(herramienta)
+  const rangoGuardado = useRef<Range | null>(null)
+
+  herramientaRef.current = herramienta
+
+  useEffect(() => {
+    setHtmlAnotado(leerHtmlAnotado(semana, fecha))
+    rangoGuardado.current = null
+  }, [semana, fecha])
 
   const persistirHtml = useCallback(() => {
     const el = anotableRef.current
     if (!el) return
-    guardarHtmlAnotado(semana, fecha, el.innerHTML)
+    const html = el.innerHTML
+    guardarHtmlAnotado(semana, fecha, html)
+    setHtmlAnotado(html)
   }, [semana, fecha])
 
-  useEffect(() => {
-    htmlRestaurado.current = false
-  }, [semana, fecha])
+  const abrirPasaje = useCallback((ref: ReferenciaBiblica) => {
+    if (herramientaRef.current !== "cursor") return
+    setPasajeActivo(ref)
+  }, [])
 
-  useEffect(() => {
-    const el = anotableRef.current
-    if (!el || htmlRestaurado.current) return
+  const intentarAplicarResalte = useCallback(() => {
+    const h = herramientaRef.current
+    if (!esHerramientaResalte(h)) return
 
-    const guardado = leerHtmlAnotado(semana, fecha)
-    if (guardado) {
-      requestAnimationFrame(() => {
-        if (anotableRef.current) {
-          anotableRef.current.innerHTML = guardado
-          htmlRestaurado.current = true
-        }
-      })
-    } else {
-      htmlRestaurado.current = true
-    }
-  }, [semana, fecha, bloques.length, resumenLimpio, preguntas.length])
-
-  const alSoltarSeleccion = useCallback(() => {
-    if (herramienta === "cursor") return
-    const sel = window.getSelection()
-    if (!sel || sel.isCollapsed) return
     const root = anotableRef.current
     if (!root) return
-    if (
-      !root.contains(sel.anchorNode) ||
-      !root.contains(sel.focusNode)
-    ) {
-      return
+
+    const aplicar = (range: Range) => {
+      if (!rangoDentroDe(root, range)) return false
+      const copia = range.cloneRange()
+      restaurarRango(copia)
+      const ok = aplicarHerramientaEnRango(h, copia, root)
+      window.getSelection()?.removeAllRanges()
+      rangoGuardado.current = null
+      if (ok) persistirHtml()
+      return ok
     }
-    if (aplicarHerramienta(herramienta)) {
-      persistirHtml()
+
+    requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        const sel = window.getSelection()
+        if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+          aplicar(sel.getRangeAt(0))
+          return
+        }
+        if (rangoGuardado.current) {
+          aplicar(rangoGuardado.current)
+        }
+      }, 60)
+    })
+  }, [persistirHtml])
+
+  useEffect(() => {
+    const root = anotableRef.current
+    if (!root) return
+
+    const onSelectionChange = () => {
+      if (!esHerramientaResalte(herramientaRef.current)) return
+      const sel = window.getSelection()
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
+      const range = sel.getRangeAt(0)
+      if (rangoDentroDe(root, range)) {
+        rangoGuardado.current = range.cloneRange()
+      }
     }
-  }, [herramienta, persistirHtml])
+
+    document.addEventListener("selectionchange", onSelectionChange)
+    return () => document.removeEventListener("selectionchange", onSelectionChange)
+  }, [semana, fecha])
+
+  const alSoltarSeleccion = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      if (!esHerramientaResalte(herramientaRef.current)) return
+      if ("changedTouches" in e && e.changedTouches.length > 1) return
+      intentarAplicarResalte()
+    },
+    [intentarAplicarResalte]
+  )
 
   if (bloques.length === 0 && !resumenLimpio && preguntas.length === 0) {
     return <p className="text-center text-sm text-muted">Sin contenido para este día.</p>
   }
 
   const claseAnotable =
-    herramienta !== "cursor" ? " leccion-anotable-marcando" : ""
+    esHerramientaResalte(herramienta)
+      ? " leccion-anotable-marcando"
+      : herramienta === "subrayar"
+        ? " leccion-anotable-lapiz"
+        : ""
 
   return (
     <>
       <article className="leccion-pagina">
         {tituloDia && <p className="leccion-dia-encabezado">{tituloDia}</p>}
 
-        <div
-          ref={anotableRef}
-          className={`leccion-anotable${claseAnotable}`}
-          onMouseUp={alSoltarSeleccion}
-          onTouchEnd={alSoltarSeleccion}
-        >
-          {bloques.length > 0 && (
-            <div className="leccion-formato">
-              {bloques.map((bloque, i) => (
-                <Bloque key={i} bloque={bloque} onPasaje={abrirPasaje} />
-              ))}
-            </div>
-          )}
+        {herramienta === "subrayar" && (
+          <p className="leccion-lapiz-aviso" role="status">
+            Dibuja sobre el texto con lápiz o dedo. Toca ↖ Leer para desplazarte.
+          </p>
+        )}
 
-          {resumenLimpio && (
-            <section className="leccion-bloque-dia" aria-label="Resumen del día">
-              <h3 className="leccion-titulo-seccion">
-                <span className="leccion-titulo-linea" aria-hidden />
-                Resumen del día
-              </h3>
-              <p className="leccion-parrafo leccion-parrafo-inicial leccion-resumen-dia">
-                <SegmentosInline segmentos={segmentosResumen} onPasaje={abrirPasaje} />
-              </p>
-            </section>
-          )}
+        <div ref={anclaInkRef} className="leccion-anotable-envoltorio">
+          <div
+            ref={anotableRef}
+            className={`leccion-anotable${claseAnotable}`}
+            onMouseUp={alSoltarSeleccion}
+            onTouchEnd={alSoltarSeleccion}
+          >
+            {htmlAnotado !== null ? (
+              <div
+                className="leccion-anotable-html"
+                dangerouslySetInnerHTML={{ __html: htmlAnotado }}
+              />
+            ) : (
+              <LeccionCuerpoDia
+                bloques={bloques}
+                resumenLimpio={resumenLimpio}
+                segmentosResumen={segmentosResumen}
+                preguntas={preguntas}
+                onPasaje={abrirPasaje}
+              />
+            )}
+          </div>
 
-          {preguntas.length > 0 && (
-            <section className="leccion-bloque-dia" aria-label="Preguntas con respuestas">
-              <h3 className="leccion-titulo-seccion">
-                <span className="leccion-titulo-linea" aria-hidden />
-                Preguntas con respuestas
-              </h3>
-              <div className="leccion-preguntas-respondidas">
-                {preguntas.map((p, i) => {
-                  const segmentosP = segmentarConPasajes(p.pregunta)
-                  const segmentosR = p.respuesta ? segmentarConPasajes(p.respuesta) : []
-                  return (
-                    <div key={i} className="leccion-qa">
-                      <p className="leccion-qa-pregunta">
-                        {p.numero && <span className="leccion-qa-num">{p.numero}. </span>}
-                        <SegmentosInline segmentos={segmentosP} onPasaje={abrirPasaje} />
-                      </p>
-                      {p.respuesta && (
-                        <p className="leccion-qa-respuesta">
-                          <span className="leccion-qa-respuesta-etq">Respuesta: </span>
-                          <SegmentosInline segmentos={segmentosR} onPasaje={abrirPasaje} />
-                        </p>
-                      )}
-                      {p.pasajes && (
-                        <p className="leccion-qa-pasajes">
-                          <span className="leccion-qa-pasajes-etq">Pasajes bíblicos:</span>{" "}
-                          {p.pasajes}
-                        </p>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          )}
+          <LeccionInkCapa
+            semana={semana}
+            fecha={fecha}
+            activo={herramienta === "subrayar"}
+            anclaRef={anclaInkRef}
+          />
         </div>
       </article>
       <PasajeFlorido pasaje={pasajeActivo} onCerrar={() => setPasajeActivo(null)} />

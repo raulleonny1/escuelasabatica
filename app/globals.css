@@ -606,10 +606,46 @@ html[data-lectura="1"] .pdf-zoom-bar {
 .leccion-anotable {
   user-select: text;
   -webkit-user-select: text;
+  -webkit-touch-callout: default;
 }
 
 .leccion-anotable-marcando {
   cursor: text;
+  touch-action: manipulation;
+}
+
+.leccion-anotable-marcando .pasaje-enlace {
+  pointer-events: none;
+}
+
+.leccion-anotable-lapiz {
+  touch-action: pan-y;
+}
+
+.leccion-anotable-envoltorio {
+  position: relative;
+}
+
+.leccion-ink-capa {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.leccion-ink-capa-activa {
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.leccion-lapiz-aviso {
+  margin: 0 0 0.75rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.5rem;
+  background: rgba(201, 162, 39, 0.12);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #78350f;
 }
 
 .leccion-anotable mark {
