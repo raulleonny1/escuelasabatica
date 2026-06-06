@@ -35,6 +35,7 @@ export default function LeccionTextoViewer({
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [offlineLista, setOfflineLista] = useState<boolean | null>(null)
+  const [descargando, setDescargando] = useState(false)
   const [herramienta, setHerramienta] = useState<HerramientaLeccion>("cursor")
   const contenidoRef = useRef<HTMLDivElement>(null)
   const lienzoRef = useRef<HTMLDivElement>(null)
@@ -91,6 +92,23 @@ export default function LeccionTextoViewer({
     [onFechaChange]
   )
 
+  const descargarSemana = useCallback(async () => {
+    if (!hayConexion()) return
+    setDescargando(true)
+    setError(null)
+    try {
+      await descargarSemanaParaOffline(semana)
+      const bloques = await cargarSemanaConOffline(semana)
+      setDias(bloques)
+      setOfflineLista(true)
+      setError(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo descargar la semana")
+    } finally {
+      setDescargando(false)
+    }
+  }, [semana])
+
   const diaActivo = dias.find((d) => d.fecha === fechaActiva) ?? dias[0]
 
   const parrafosDia =
@@ -111,9 +129,23 @@ export default function LeccionTextoViewer({
 
   if (error) {
     return (
-      <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 p-6 text-center text-sm text-red-700">
-        <p className="font-semibold">No se pudo cargar la lección</p>
-        <p className="text-slate-600">{error}</p>
+      <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center text-sm">
+        <p className="font-semibold text-red-700">No se pudo cargar la lección</p>
+        <p className="max-w-sm text-slate-600">{error}</p>
+        {!hayConexion() ? (
+          <p className="max-w-xs text-xs text-slate-500">
+            Conéctate a internet, abre esta semana y pulsa «Descargar semana» para leerla sin Wi‑Fi.
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void descargarSemana()}
+            disabled={descargando}
+            className="leccion-offline-btn"
+          >
+            {descargando ? "Descargando…" : "Descargar semana ahora"}
+          </button>
+        )}
       </div>
     )
   }
@@ -143,6 +175,27 @@ export default function LeccionTextoViewer({
         </nav>
 
         <LeccionBarraEdicion herramienta={herramienta} onHerramienta={setHerramienta} />
+
+        <div className="leccion-offline-panel">
+          {offlineLista ? (
+            <p className="leccion-offline-estado leccion-offline-estado-ok" role="status">
+              Disponible sin internet
+            </p>
+          ) : hayConexion() ? (
+            <button
+              type="button"
+              onClick={() => void descargarSemana()}
+              disabled={descargando}
+              className="leccion-offline-btn leccion-offline-btn-sidebar"
+            >
+              {descargando ? "Guardando…" : "Descargar semana"}
+            </button>
+          ) : (
+            <p className="leccion-offline-estado" role="status">
+              Sin internet — no descargada
+            </p>
+          )}
+        </div>
       </aside>
 
       <div

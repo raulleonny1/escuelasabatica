@@ -1,8 +1,9 @@
 import type { DiaLeccionCompleto } from "@/lib/leccionAuxiliar"
 import { cargarSemanaCompletaDesdeRed } from "@/lib/leccionAuxiliar"
-import { getPdfUrl, semanaTieneLeccion } from "@/lib/pdfUrls"
+import { getPdfUrl, SEMANAS_CON_LECCION, semanaTieneLeccion } from "@/lib/pdfUrls"
 import { guardarSemanaOffline, leerSemanaOffline } from "@/lib/offlineDb"
 import { pdfEstaEnCache, precachePdfsSemana } from "@/lib/offlinePdf"
+import { TOTAL_SEMANAS } from "@/lib/semana"
 import { hayConexion } from "@/lib/syncCola"
 
 function diasDesdeRegistro(registro: { dias: unknown } | null): DiaLeccionCompleto[] | null {
@@ -10,13 +11,19 @@ function diasDesdeRegistro(registro: { dias: unknown } | null): DiaLeccionComple
   return registro.dias as DiaLeccionCompleto[]
 }
 
-/** Carga semana: red si hay internet; si no, IndexedDB. */
+/** Carga semana: caché local primero; actualiza en segundo plano si hay internet. */
 export async function cargarSemanaConOffline(semana: number): Promise<DiaLeccionCompleto[]> {
   const guardada = await leerSemanaOffline(semana)
   const diasGuardados = diasDesdeRegistro(guardada)
 
+  if (diasGuardados?.length) {
+    if (hayConexion()) {
+      void descargarSemanaParaOffline(semana).catch(() => {})
+    }
+    return diasGuardados
+  }
+
   if (!hayConexion()) {
-    if (diasGuardados) return diasGuardados
     throw new Error(
       "Sin internet y esta semana no está descargada. Conéctate una vez para guardarla en el iPad."
     )
@@ -28,7 +35,6 @@ export async function cargarSemanaConOffline(semana: number): Promise<DiaLeccion
     void precachePdfsSemana(semana)
     return dias
   } catch (err) {
-    if (diasGuardados) return diasGuardados
     throw err instanceof Error ? err : new Error("No se pudo cargar la semana")
   }
 }
@@ -46,8 +52,44 @@ export async function descargarSemanaParaOffline(semana: number): Promise<void> 
 
   await precachePdfsSemana(semana, pdfs)
 
-  const dias = await cargarSemanaCompletaDesdeRed(semana)
-  await guardarSemanaOffline(semana, dias)
+  if (semanaTieneLeccion(semana)) {
+    const dias = await cargarSemanaCompletaDesdeRed(semana)
+    await guardarSemanaOffline(semana, dias)
+  }
+}
+
+/** Guarda en el dispositivo todas las semanas con lector de texto (8–12) y PDFs del trimestre. */
+export async function descargarTrimestreParaOffline(
+  onProgreso?: (hecho: number, total: number) => void
+): Promise<void> {
+  if (!hayConexion()) return
+
+  const semanasTexto = [...SEMANAS_CON_LECCION]
+  const semanasPdf = Array.from({ length: TOTAL_SEMANAS }, (_, i) => i + 1).filter(
+    (s) => !semanaTieneLeccion(s)
+  )
+  const total = semanasTexto.length + semanasPdf.length
+  let hecho = 0
+
+  for (const s of semanasTexto) {
+    try {
+      await descargarSemanaParaOffline(s)
+    } catch {
+      /* continuar con las demás */
+    }
+    hecho++
+    onProgreso?.(hecho, total)
+  }
+
+  for (const s of semanasPdf) {
+    try {
+      await precachePdfsSemana(s)
+    } catch {
+      /* continuar */
+    }
+    hecho++
+    onProgreso?.(hecho, total)
+  }
 }
 
 export async function semanaDisponibleOffline(semana: number): Promise<boolean> {

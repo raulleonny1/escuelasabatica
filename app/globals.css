@@ -466,6 +466,52 @@ html[data-lectura="1"] .pdf-zoom-bar {
   text-align: center;
 }
 
+.leccion-offline-panel {
+  margin-top: auto;
+  padding: 0.5rem 0.45rem 0.65rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.leccion-offline-estado {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-align: center;
+  color: #64748b;
+}
+
+.leccion-offline-estado-ok {
+  color: #166534;
+  font-weight: 600;
+}
+
+.leccion-offline-btn {
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid rgba(30, 58, 95, 0.25);
+  border-radius: 0.45rem;
+  background: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #1e3a5f;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.leccion-offline-btn:hover:not(:disabled) {
+  background: rgba(30, 58, 95, 0.06);
+}
+
+.leccion-offline-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.leccion-offline-btn-sidebar {
+  font-size: 0.68rem;
+}
+
 .leccion-lienzo {
   position: relative;
   width: 100%;
@@ -667,11 +713,11 @@ html[data-lectura="1"] .pdf-zoom-bar {
   inset: 0;
   z-index: 2;
   pointer-events: none;
-  mix-blend-mode: multiply;
   -webkit-touch-callout: none;
 }
 
-.leccion-ink-gl {
+.leccion-ink-base,
+.leccion-ink-live {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -680,27 +726,17 @@ html[data-lectura="1"] .pdf-zoom-bar {
   display: block;
 }
 
+.leccion-ink-live {
+  pointer-events: none;
+}
+
 .leccion-ink-capa-activa {
   pointer-events: auto;
 }
 
-.leccion-ink-capa-activa .leccion-ink-gl {
+.leccion-ink-capa-activa .leccion-ink-live {
   pointer-events: auto;
   touch-action: none;
-}
-
-.leccion-ink-fallback {
-  position: absolute;
-  bottom: 0.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 0.35rem 0.6rem;
-  border-radius: 0.4rem;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 0.7rem;
-  color: #64748b;
-  pointer-events: none;
 }
 
 .leccion-lienzo-tinta .leccion-pagina,

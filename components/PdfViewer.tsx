@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Viewer, Worker, SpecialZoomLevel } from "@react-pdf-viewer/core"
 import { zoomPlugin } from "@react-pdf-viewer/zoom"
 import { findPageIndexForDay, getFechaLecturaParaSemana } from "@/lib/leccionPdf"
+import { resolverUrlPdf, revocarUrlPdfBlob } from "@/lib/offlinePdf"
+import { hayConexion } from "@/lib/syncCola"
 import "@react-pdf-viewer/core/lib/styles/index.css"
 import "@react-pdf-viewer/zoom/lib/styles/index.css"
 
@@ -63,12 +65,14 @@ function SyncEscalaEffect({
 export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProps) {
   const [touchMode] = useState(detectarModoTactil)
   const [montado, setMontado] = useState(false)
+  const [urlLista, setUrlLista] = useState<string | null>(null)
   const [paginaInicial, setPaginaInicial] = useState(0)
   const [paginaLista, setPaginaLista] = useState(false)
   const [escala, setEscala] = useState(1)
   const shellRef = useRef<HTMLDivElement>(null)
   const escalaRef = useRef(1)
   const pinchInicio = useRef({ dist: 0, escala: 1 })
+  const blobUrlRef = useRef<string | null>(null)
 
   const zoomPluginInstance = zoomPlugin({ enableShortcuts: true })
   const { zoomTo, CurrentScale, ZoomIn, ZoomOut } = zoomPluginInstance
@@ -93,6 +97,33 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
   }, [])
 
   useEffect(() => {
+    let cancelado = false
+    setUrlLista(null)
+
+    void resolverUrlPdf(url).then((resuelta) => {
+      if (cancelado) {
+        revocarUrlPdfBlob(resuelta)
+        return
+      }
+      if (blobUrlRef.current) revocarUrlPdfBlob(blobUrlRef.current)
+      blobUrlRef.current = resuelta.startsWith("blob:") ? resuelta : null
+      setUrlLista(resuelta)
+    })
+
+    return () => {
+      cancelado = true
+      if (blobUrlRef.current) {
+        revocarUrlPdfBlob(blobUrlRef.current)
+        blobUrlRef.current = null
+      }
+    }
+  }, [url])
+
+  useEffect(() => {
+    if (!urlLista) {
+      setPaginaLista(false)
+      return
+    }
     if (!irAlDiaLectura || !semana) {
       setPaginaLista(true)
       return
@@ -113,7 +144,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
       try {
         const pdfjs = await import("pdfjs-dist")
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js"
-        const doc = await conTiempo(pdfjs.getDocument(url).promise, null)
+        const doc = await conTiempo(pdfjs.getDocument(urlLista!).promise, null)
         if (!doc || cancelado) return
         const fecha = getFechaLecturaParaSemana(semana!)
         const index = await conTiempo(findPageIndexForDay(doc, fecha), 0)
@@ -130,7 +161,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
     return () => {
       cancelado = true
     }
-  }, [url, irAlDiaLectura, semana, touchMode])
+  }, [urlLista, irAlDiaLectura, semana, touchMode])
 
   useEffect(() => {
     const root = shellRef.current
@@ -180,7 +211,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
       scrollEl?.removeEventListener("touchstart", onTouchStart)
       scrollEl?.removeEventListener("touchmove", onTouchMove)
     }
-  }, [montado, paginaLista, url, aplicarZoom])
+  }, [montado, paginaLista, urlLista, aplicarZoom])
 
   useEffect(() => {
     const bloquearZoomPagina = (e: TouchEvent) => {
@@ -193,7 +224,7 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
     return () => document.removeEventListener("touchmove", bloquearZoomPagina)
   }, [])
 
-  if (!montado || !paginaLista) {
+  if (!montado || !urlLista || !paginaLista) {
     return (
       <div className="pdf-viewer-shell flex flex-col items-center justify-center gap-2 p-4 text-sm text-slate-500">
         <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -242,8 +273,8 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
 
       <Worker workerUrl="/pdf.worker.min.js">
         <Viewer
-          key={`${url}-${paginaInicial}`}
-          fileUrl={url}
+          key={`${urlLista}-${paginaInicial}`}
+          fileUrl={urlLista}
           initialPage={paginaInicial}
           defaultScale={touchMode ? SpecialZoomLevel.PageWidth : SpecialZoomLevel.PageFit}
           plugins={[zoomPluginInstance]}
@@ -258,6 +289,12 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
               <p className="text-sm text-slate-600">
                 {loadError.message || "Archivo no encontrado"}
               </p>
+              {!hayConexion() && (
+                <p className="max-w-xs text-xs text-slate-500">
+                  Sin internet. Abre la app con Wi‑Fi al menos una vez para guardar esta semana en el
+                  iPad.
+                </p>
+              )}
               <p className="text-xs text-slate-400 break-all">{url}</p>
             </div>
           )}

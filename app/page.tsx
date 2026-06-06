@@ -41,7 +41,7 @@ import {
   getSemanaActual,
 } from "@/lib/semana"
 import { getPdfUrl, semanaTieneLeccion } from "@/lib/pdfUrls"
-import { descargarSemanaParaOffline } from "@/lib/leccionOffline"
+import { descargarSemanaParaOffline, descargarTrimestreParaOffline } from "@/lib/leccionOffline"
 import {
   encolarEliminarComentario,
   encolarGuardarComentario,
@@ -243,9 +243,14 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (!hayConexion()) return
+    if (!hayConexion() || !sesion) return
     void descargarSemanaParaOffline(semana).catch(() => {})
-  }, [semana])
+  }, [semana, sesion])
+
+  useEffect(() => {
+    if (!hayConexion() || !sesion) return
+    void descargarTrimestreParaOffline().catch(() => {})
+  }, [sesion])
 
   useEffect(() => {
     if (!claseId) {

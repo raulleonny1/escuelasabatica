@@ -1,7 +1,9 @@
 import { TOTAL_SEMANAS } from "@/lib/semana"
 
-/** Semanas con PDF de lección disponible (texto formateado o visor). */
+/** Semanas con lector de texto formateado (8–12). */
 export const SEMANAS_CON_LECCION = [8, 9, 10, 11, 12] as const
+
+export type SemanaConLeccion = (typeof SEMANAS_CON_LECCION)[number]
 
 export function semanaTieneLeccion(semana: number): boolean {
   return (SEMANAS_CON_LECCION as readonly number[]).includes(semana)

@@ -1,29 +1,28 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
-import { MotorPizarraWebGL } from "@/lib/pizarraWebGL"
-import { esEntradaPen, predecirPuntosInk } from "@/lib/pizarraTinta"
+import { useCallback, useEffect, useRef, type RefObject } from "react"
+import { esEntradaPen } from "@/lib/pizarraTinta"
 import type { HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
   agregarPuntosInk,
+  crearContextoTinta,
   esEntradaDibujo,
   puntosCoalescidos,
-  puntosPredichos,
   type PuntoInk,
 } from "@/lib/leccionInkInput"
-import { mallaDesdeTrazoLeccion, mallaDesdeTrazoGuardado } from "@/lib/leccionInkMalla"
+import {
+  COLOR_LAPIZ,
+  GROSOR_LAPIZ,
+  pintarTrazoEnCtx,
+  repintarTrazos,
+  trazoDesdePuntos,
+} from "@/lib/leccionInkPintura"
 import {
   borrarTrazosEnPunto,
-  grosorDesdePresion,
   guardarTrazosLeccion,
   leerTrazosLeccion,
   type TrazoLeccionLocal,
 } from "@/lib/leccionTintaLocal"
-
-const COLOR_LAPIZ = "#92400e"
-const GROSOR_BASE = 4.5
-const ID_ACTIVO = "__activo__"
-const ID_PRED = "__prediccion__"
 
 type Props = {
   semana: number
@@ -33,28 +32,25 @@ type Props = {
 }
 
 export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const motorRef = useRef<MotorPizarraWebGL | null>(null)
+  const baseRef = useRef<HTMLCanvasElement>(null)
+  const liveRef = useRef<HTMLCanvasElement>(null)
   const trazosRef = useRef<TrazoLeccionLocal[]>([])
   const trazoActivo = useRef<PuntoInk[]>([])
-  const prediccionActiva = useRef<PuntoInk[]>([])
-  const grosorActivo = useRef(GROSOR_BASE)
   const pintando = useRef(false)
   const penPrioritario = useRef(false)
   const pointerId = useRef<number | null>(null)
-  const rafRender = useRef(0)
-  const mallasCache = useRef(new Map<string, string>())
+  const rafPintar = useRef(0)
   const dims = useRef({ w: 0, h: 0, dpr: 1 })
   const modoRef = useRef(modo)
   modoRef.current = modo
 
-  const [webglOk, setWebglOk] = useState(true)
   const puedeDibujar = modo !== null
 
-  const sincronizarDims = useCallback(() => {
+  const sincronizarCanvas = useCallback(() => {
     const ancla = anclaRef.current
-    const canvas = canvasRef.current
-    if (!ancla || !canvas) return false
+    const base = baseRef.current
+    const live = liveRef.current
+    if (!ancla || !base || !live) return false
 
     const w = Math.max(ancla.scrollWidth, ancla.clientWidth)
     const h = Math.max(ancla.scrollHeight, ancla.clientHeight)
@@ -62,159 +58,82 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
 
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
     dims.current = { w, h, dpr }
-    canvas.style.width = `${w}px`
-    canvas.style.height = `${h}px`
-    motorRef.current?.resize(w, h, dpr)
+
+    for (const canvas of [base, live]) {
+      canvas.width = Math.floor(w * dpr)
+      canvas.height = Math.floor(h * dpr)
+      canvas.style.width = `${w}px`
+      canvas.style.height = `${h}px`
+    }
+
+    const ctx = crearContextoTinta(base)
+    if (ctx) repintarTrazos(ctx, trazosRef.current, dpr)
     return true
   }, [anclaRef])
 
-  const actualizarCapa = useCallback(
-    (
-      id: string,
-      points: PuntoInk[],
-      color: string,
-      size: number,
-      alpha = 1,
-      forzar = false
-    ) => {
-      const motor = motorRef.current
-      if (!motor) return
-      const { dpr } = dims.current
-      if (points.length === 0) {
-        motor.eliminarCapa(id)
-        mallasCache.current.delete(id)
-        return
-      }
-      const sig = `${id}:${points.length}:${points.at(-1)?.join(",")}:${size}:${alpha}`
-      if (!forzar && mallasCache.current.get(id) === sig) return
-      const malla = mallaDesdeTrazoLeccion(points, color, size, dpr, alpha)
-      motor.actualizarCapa(id, malla)
-      mallasCache.current.set(id, sig)
-    },
-    []
-  )
-
-  const renderFrame = useCallback(() => {
-    const motor = motorRef.current
-    if (!motor || dims.current.w <= 0) return
-
-    const ids = trazosRef.current.map((t) => t.id)
-    const { dpr } = dims.current
-
-    for (const trazo of trazosRef.current) {
-      const sig = `${trazo.id}:saved`
-      if (mallasCache.current.get(trazo.id) !== sig) {
-        const malla = mallaDesdeTrazoGuardado(trazo, dpr)
-        motor.actualizarCapa(trazo.id, malla)
-        mallasCache.current.set(trazo.id, sig)
-      }
-    }
-
-    const overlays: string[] = []
-    const pts = trazoActivo.current
-
-    if (pts.length > 0 && modoRef.current === "subrayar") {
-      actualizarCapa(ID_ACTIVO, pts, COLOR_LAPIZ, grosorActivo.current, 1, true)
-      overlays.push(ID_ACTIVO)
-
-      const pred = prediccionActiva.current
-      if (pred.length > 0) {
-        actualizarCapa(
-          ID_PRED,
-          [...pts.slice(-2), ...pred],
-          COLOR_LAPIZ,
-          grosorActivo.current,
-          0.38,
-          true
-        )
-        overlays.push(ID_PRED)
-      } else {
-        motor.eliminarCapa(ID_PRED)
-      }
-    } else {
-      motor.eliminarCapa(ID_ACTIVO)
-      motor.eliminarCapa(ID_PRED)
-    }
-
-    motor.podarCapas(new Set([...ids, ID_ACTIVO, ID_PRED]))
-    motor.render(ids, overlays)
-  }, [actualizarCapa])
-
-  const programarRender = useCallback(() => {
-    cancelAnimationFrame(rafRender.current)
-    rafRender.current = requestAnimationFrame(() => {
-      if (!sincronizarDims()) return
-      renderFrame()
-    })
-  }, [renderFrame, sincronizarDims])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    try {
-      motorRef.current = new MotorPizarraWebGL(canvas, { fondoTransparente: true })
-      setWebglOk(true)
-    } catch (e) {
-      console.warn("[leccion-ink] WebGL no disponible", e)
-      motorRef.current = null
-      setWebglOk(false)
-    }
-    programarRender()
-    return () => {
-      motorRef.current?.dispose()
-      motorRef.current = null
-      mallasCache.current.clear()
-    }
-  }, [programarRender])
-
   useEffect(() => {
     trazosRef.current = leerTrazosLeccion(semana, fecha)
-    mallasCache.current.clear()
-    programarRender()
-  }, [semana, fecha, programarRender])
+    sincronizarCanvas()
+  }, [semana, fecha, sincronizarCanvas])
 
   useEffect(() => {
     const ancla = anclaRef.current
     if (!ancla) return
     const obs = new ResizeObserver(() => {
-      if (!pintando.current) {
-        mallasCache.current.clear()
-        programarRender()
-      }
+      if (!pintando.current) sincronizarCanvas()
     })
     obs.observe(ancla)
     return () => obs.disconnect()
-  }, [anclaRef, programarRender])
+  }, [anclaRef, sincronizarCanvas])
 
   const persistir = useCallback(() => {
     guardarTrazosLeccion(semana, fecha, trazosRef.current)
   }, [semana, fecha])
 
-  const rectAncla = useCallback(() => {
-    return anclaRef.current?.getBoundingClientRect() ?? null
-  }, [anclaRef])
+  const pintarVivo = useCallback(() => {
+    const live = liveRef.current
+    if (!live) return
+    const ctx = crearContextoTinta(live)
+    if (!ctx) return
+    const { dpr } = dims.current
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, live.width / dpr, live.height / dpr)
+
+    const pts = trazoActivo.current
+    if (pts.length > 0 && modoRef.current === "subrayar") {
+      pintarTrazoEnCtx(ctx, pts, COLOR_LAPIZ, GROSOR_LAPIZ)
+    }
+  }, [])
+
+  const programarPintado = useCallback(() => {
+    if (rafPintar.current) return
+    rafPintar.current = requestAnimationFrame(() => {
+      rafPintar.current = 0
+      pintarVivo()
+    })
+  }, [pintarVivo])
+
+  const rectAncla = useCallback(() => anclaRef.current?.getBoundingClientRect() ?? null, [anclaRef])
 
   const rechazarEntrada = useCallback((e: PointerEvent) => {
-    if (penPrioritario.current && e.pointerType !== "pen") return true
-    return false
+    return penPrioritario.current && e.pointerType !== "pen"
   }, [])
 
   const aplicarBorrador = useCallback(
     (x: number, y: number) => {
       const { trazos, huboCambio } = borrarTrazosEnPunto(trazosRef.current, x, y)
-      if (huboCambio) {
-        trazosRef.current = trazos
-        persistir()
-        mallasCache.current.clear()
-        programarRender()
-      }
+      if (!huboCambio) return
+      trazosRef.current = trazos
+      persistir()
+      const ctx = baseRef.current ? crearContextoTinta(baseRef.current) : null
+      if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.dpr)
     },
-    [persistir, programarRender]
+    [persistir]
   )
 
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !puedeDibujar || !webglOk) return
+    const live = liveRef.current
+    if (!live || !puedeDibujar) return
 
     const onPointerDown = (e: PointerEvent) => {
       if (!modoRef.current || !esEntradaDibujo(e)) return
@@ -227,7 +146,7 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       if (!rect) return
 
       e.preventDefault()
-      canvas.setPointerCapture(e.pointerId)
+      live.setPointerCapture(e.pointerId)
       pointerId.current = e.pointerId
       pintando.current = true
       if (esEntradaPen(e.pointerType)) penPrioritario.current = true
@@ -241,10 +160,8 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
         return
       }
 
-      grosorActivo.current = grosorDesdePresion(p[2], GROSOR_BASE)
       trazoActivo.current = [p]
-      prediccionActiva.current = []
-      programarRender()
+      programarPintado()
     }
 
     const onPointerMove = (e: PointerEvent) => {
@@ -256,111 +173,75 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       e.preventDefault()
 
       const coalescidos = puntosCoalescidos(e, rect)
-      const ultimo = coalescidos[coalescidos.length - 1]
-      if (!ultimo) return
+      if (coalescidos.length === 0) return
 
       if (modoRef.current === "borrador") {
         for (const c of coalescidos) aplicarBorrador(c[0], c[1])
         return
       }
 
-      trazoActivo.current = agregarPuntosInk(trazoActivo.current, coalescidos, 0.5)
-
-      const predNativa = puntosPredichos(e, rect)
-      if (predNativa.length > 0) {
-        prediccionActiva.current = predNativa
-      } else if (trazoActivo.current.length >= 2) {
-        const ultimos = trazoActivo.current.slice(-3)
-        prediccionActiva.current = predecirPuntosInk(
-          ultimos.map(([x, y, pr]) => ({
-            x,
-            y,
-            pressure: pr,
-            time: 0,
-            tiltX: 0,
-            tiltY: 0,
-          })),
-          2
-        ).map((p) => [p.x, p.y, p.pressure] as PuntoInk)
-      }
-
-      programarRender()
+      trazoActivo.current = agregarPuntosInk(trazoActivo.current, coalescidos, 0.8)
+      programarPintado()
     }
 
     const onPointerUp = (e: PointerEvent) => {
       if (pointerId.current !== e.pointerId) return
 
-      cancelAnimationFrame(rafRender.current)
+      cancelAnimationFrame(rafPintar.current)
+      rafPintar.current = 0
       pintando.current = false
       pointerId.current = null
-      prediccionActiva.current = []
-
       if (esEntradaPen(e.pointerType)) penPrioritario.current = false
 
       if (modoRef.current === "subrayar") {
         const pts = trazoActivo.current
         trazoActivo.current = []
         if (pts.length >= 1) {
-          trazosRef.current = [
-            ...trazosRef.current,
-            {
-              id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-              points: pts,
-              color: COLOR_LAPIZ,
-              size: grosorActivo.current,
-            },
-          ]
+          trazosRef.current = [...trazosRef.current, trazoDesdePuntos(pts)]
           persistir()
-          mallasCache.current.delete(trazosRef.current.at(-1)!.id)
+          const ctx = baseRef.current ? crearContextoTinta(baseRef.current) : null
+          if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.dpr)
         }
       } else {
         trazoActivo.current = []
       }
 
-      programarRender()
+      const ctxLive = live ? crearContextoTinta(live) : null
+      if (ctxLive) {
+        const { dpr } = dims.current
+        ctxLive.clearRect(0, 0, live.width / dpr, live.height / dpr)
+      }
 
       try {
-        canvas.releasePointerCapture(e.pointerId)
+        live.releasePointerCapture(e.pointerId)
       } catch {
         /* ya liberado */
       }
     }
 
-    canvas.addEventListener("pointerdown", onPointerDown, { passive: false })
-    canvas.addEventListener("pointermove", onPointerMove, { passive: false })
-    canvas.addEventListener("pointerup", onPointerUp, { passive: false })
-    canvas.addEventListener("pointercancel", onPointerUp, { passive: false })
+    live.addEventListener("pointerdown", onPointerDown, { passive: false })
+    live.addEventListener("pointermove", onPointerMove, { passive: false })
+    live.addEventListener("pointerup", onPointerUp, { passive: false })
+    live.addEventListener("pointercancel", onPointerUp, { passive: false })
 
     return () => {
-      cancelAnimationFrame(rafRender.current)
-      canvas.removeEventListener("pointerdown", onPointerDown)
-      canvas.removeEventListener("pointermove", onPointerMove)
-      canvas.removeEventListener("pointerup", onPointerUp)
-      canvas.removeEventListener("pointercancel", onPointerUp)
+      cancelAnimationFrame(rafPintar.current)
+      live.removeEventListener("pointerdown", onPointerDown)
+      live.removeEventListener("pointermove", onPointerMove)
+      live.removeEventListener("pointerup", onPointerUp)
+      live.removeEventListener("pointercancel", onPointerUp)
     }
-  }, [
-    puedeDibujar,
-    webglOk,
-    aplicarBorrador,
-    persistir,
-    programarRender,
-    rectAncla,
-    rechazarEntrada,
-  ])
+  }, [puedeDibujar, aplicarBorrador, persistir, programarPintado, rectAncla, rechazarEntrada])
 
   return (
     <div
       className={`leccion-ink-capas${puedeDibujar ? " leccion-ink-capa-activa" : ""}${
         modo === "borrador" ? " leccion-ink-capa-borrador" : ""
-      }${webglOk ? " leccion-ink-webgl" : ""}`}
+      }`}
       aria-hidden
     >
-      <canvas ref={canvasRef} className="leccion-ink-gl" />
-      {!webglOk && (
-        <p className="leccion-ink-fallback" role="status">
-          Motor gráfico limitado en este dispositivo.
-        </p>
-      )}
+      <canvas ref={baseRef} className="leccion-ink-base" />
+      <canvas ref={liveRef} className="leccion-ink-live" />
     </div>
   )
 }
