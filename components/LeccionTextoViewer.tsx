@@ -83,6 +83,11 @@ export default function LeccionTextoViewer({
       .catch(() => {})
   }, [semana])
 
+  useEffect(() => {
+    if (!esHerramientaTinta(herramienta)) return
+    window.getSelection()?.removeAllRanges()
+  }, [herramienta])
+
   const seleccionarDia = useCallback(
     (fecha: string) => {
       setFechaActiva(fecha)

@@ -5,6 +5,7 @@ import { formatearParrafosDia, type BloqueLeccion } from "@/lib/leccionFormato"
 import {
   aplicarHerramientaEnRango,
   esHerramientaResalte,
+  esHerramientaTinta,
   guardarHtmlAnotado,
   leerHtmlAnotado,
   restaurarRango,
@@ -258,6 +259,10 @@ export default function LeccionContenidoFormateado({
     if (!root) return
 
     const onSelectionChange = () => {
+      if (esHerramientaTinta(herramientaRef.current)) {
+        window.getSelection()?.removeAllRanges()
+        return
+      }
       if (!esHerramientaResalte(herramientaRef.current)) return
       const sel = window.getSelection()
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
@@ -284,7 +289,11 @@ export default function LeccionContenidoFormateado({
     return <p className="text-center text-sm text-muted">Sin contenido para este día.</p>
   }
 
-  const claseAnotable = esHerramientaResalte(herramienta) ? " leccion-anotable-marcando" : ""
+  const claseAnotable = esHerramientaResalte(herramienta)
+    ? " leccion-anotable-marcando"
+    : esHerramientaTinta(herramienta)
+      ? " leccion-anotable-tinta"
+      : ""
 
   return (
     <>

@@ -32,6 +32,7 @@ type Props = {
 }
 
 export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props) {
+  const capasRef = useRef<HTMLDivElement>(null)
   const baseRef = useRef<HTMLCanvasElement>(null)
   const liveRef = useRef<HTMLCanvasElement>(null)
   const trazosRef = useRef<TrazoLeccionLocal[]>([])
@@ -132,8 +133,12 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
   )
 
   useEffect(() => {
-    const live = liveRef.current
-    if (!live || !puedeDibujar) return
+    const capas = capasRef.current
+    if (!capas || !puedeDibujar) return
+
+    const limpiarSeleccion = () => {
+      window.getSelection()?.removeAllRanges()
+    }
 
     const onPointerDown = (e: PointerEvent) => {
       if (!modoRef.current || !esEntradaDibujo(e)) return
@@ -146,7 +151,9 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       if (!rect) return
 
       e.preventDefault()
-      live.setPointerCapture(e.pointerId)
+      e.stopPropagation()
+      limpiarSeleccion()
+      capas.setPointerCapture(e.pointerId)
       pointerId.current = e.pointerId
       pintando.current = true
       if (esEntradaPen(e.pointerType)) penPrioritario.current = true
@@ -171,6 +178,7 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       const rect = rectAncla()
       if (!rect) return
       e.preventDefault()
+      e.stopPropagation()
 
       const coalescidos = puntosCoalescidos(e, rect)
       if (coalescidos.length === 0) return
@@ -186,6 +194,10 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
 
     const onPointerUp = (e: PointerEvent) => {
       if (pointerId.current !== e.pointerId) return
+
+      e.preventDefault()
+      e.stopPropagation()
+      limpiarSeleccion()
 
       cancelAnimationFrame(rafPintar.current)
       rafPintar.current = 0
@@ -206,35 +218,43 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
         trazoActivo.current = []
       }
 
+      const live = liveRef.current
       const ctxLive = live ? crearContextoTinta(live) : null
-      if (ctxLive) {
+      if (ctxLive && live) {
         const { dpr } = dims.current
         ctxLive.clearRect(0, 0, live.width / dpr, live.height / dpr)
       }
 
       try {
-        live.releasePointerCapture(e.pointerId)
+        capas.releasePointerCapture(e.pointerId)
       } catch {
         /* ya liberado */
       }
     }
 
-    live.addEventListener("pointerdown", onPointerDown, { passive: false })
-    live.addEventListener("pointermove", onPointerMove, { passive: false })
-    live.addEventListener("pointerup", onPointerUp, { passive: false })
-    live.addEventListener("pointercancel", onPointerUp, { passive: false })
+    const onSelectStart = (e: Event) => {
+      e.preventDefault()
+    }
+
+    capas.addEventListener("pointerdown", onPointerDown, { passive: false })
+    capas.addEventListener("pointermove", onPointerMove, { passive: false })
+    capas.addEventListener("pointerup", onPointerUp, { passive: false })
+    capas.addEventListener("pointercancel", onPointerUp, { passive: false })
+    capas.addEventListener("selectstart", onSelectStart)
 
     return () => {
       cancelAnimationFrame(rafPintar.current)
-      live.removeEventListener("pointerdown", onPointerDown)
-      live.removeEventListener("pointermove", onPointerMove)
-      live.removeEventListener("pointerup", onPointerUp)
-      live.removeEventListener("pointercancel", onPointerUp)
+      capas.removeEventListener("pointerdown", onPointerDown)
+      capas.removeEventListener("pointermove", onPointerMove)
+      capas.removeEventListener("pointerup", onPointerUp)
+      capas.removeEventListener("pointercancel", onPointerUp)
+      capas.removeEventListener("selectstart", onSelectStart)
     }
   }, [puedeDibujar, aplicarBorrador, persistir, programarPintado, rectAncla, rechazarEntrada])
 
   return (
     <div
+      ref={capasRef}
       className={`leccion-ink-capas${puedeDibujar ? " leccion-ink-capa-activa" : ""}${
         modo === "borrador" ? " leccion-ink-capa-borrador" : ""
       }`}

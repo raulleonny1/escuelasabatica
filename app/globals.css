@@ -538,7 +538,21 @@ html[data-lectura="1"] .pdf-zoom-bar {
 }
 
 .leccion-lienzo-tinta {
-  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.leccion-lienzo-tinta * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none;
+}
+
+.leccion-anotable-tinta {
+  cursor: crosshair;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .leccion-dias-sidebar {
@@ -711,9 +725,10 @@ html[data-lectura="1"] .pdf-zoom-bar {
 .leccion-ink-capas {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 4;
   pointer-events: none;
   -webkit-touch-callout: none;
+  touch-action: none;
 }
 
 .leccion-ink-base,
@@ -732,15 +747,18 @@ html[data-lectura="1"] .pdf-zoom-bar {
 
 .leccion-ink-capa-activa {
   pointer-events: auto;
+  cursor: crosshair;
+  touch-action: pan-y;
 }
 
+.leccion-ink-capa-activa .leccion-ink-base,
 .leccion-ink-capa-activa .leccion-ink-live {
-  pointer-events: auto;
-  touch-action: none;
+  pointer-events: none;
 }
 
 .leccion-lienzo-tinta .leccion-pagina,
-.leccion-lienzo-tinta .leccion-anotable {
+.leccion-lienzo-tinta .leccion-anotable,
+.leccion-lienzo-tinta .leccion-anotable-html {
   position: relative;
   z-index: 1;
   pointer-events: none;

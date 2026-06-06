@@ -56,7 +56,13 @@ export function trazoUsaPresionReal(points: PuntoInk[]): boolean {
 export function esEntradaDibujo(e: PointerEvent): boolean {
   if (e.pointerType === "pen") return true
   if (e.pointerType === "mouse") return e.buttons === 1
-  if (e.pointerType === "touch") return true
+  if (e.pointerType === "touch") {
+    // iPad: el dedo desplaza; solo el Apple Pencil dibuja
+    if (typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches) {
+      return false
+    }
+    return true
+  }
   return false
 }
 
