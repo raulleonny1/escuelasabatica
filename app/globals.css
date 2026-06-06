@@ -198,11 +198,18 @@ body {
   }
 }
 
-button,
-select,
-textarea,
-input[type="date"] {
-  touch-action: manipulation;
+/* Pizarra: dibujo táctil sin scroll ni selección */
+.pizarra-lienzo {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+.pizarra-lienzo canvas {
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Chat: barra de envío siempre visible (no quedar detrás de la nav inferior) */

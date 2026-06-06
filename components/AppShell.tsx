@@ -12,7 +12,7 @@ import { leerSesion, type SesionUsuario } from "@/lib/sesionUsuario"
 function CabeceraEnvolvente() {
   const lectura = useLecturaUiOptional()
   const pizarra = usePizarraOptional()
-  const oculta = Boolean(lectura?.headerOculto || pizarra?.abierta)
+  const oculta = Boolean(lectura?.headerOculto || pizarra?.pantallaCompleta)
 
   useEffect(() => {
     document.documentElement.dataset.lectura = oculta ? "1" : "0"

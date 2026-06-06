@@ -109,6 +109,10 @@ export function subscribeTrazosPizarra(
   })
 }
 
+export async function pulsoPizarraActiva(claseId: string, maestroNombre: string) {
+  await publicarEstadoPizarra(claseId, maestroNombre, true)
+}
+
 export async function publicarEstadoPizarra(
   claseId: string,
   maestroNombre: string,
@@ -138,6 +142,13 @@ export async function guardarTrazoPizarra(
     ...trazo,
     orden: Date.now(),
   })
+}
+
+export async function eliminarTrazosPizarra(claseId: string, ids: string[]) {
+  if (!ids.length) return
+  const batch = writeBatch(db)
+  ids.forEach((id) => batch.delete(doc(trazosCol(claseId), id)))
+  await batch.commit()
 }
 
 export async function limpiarPaginaPizarra(
@@ -198,8 +209,13 @@ export function desnormalizarPunto(x: number, y: number, w: number, h: number) {
   return { x: (x / 1000) * w, y: (y / 1000) * h }
 }
 
+/** Coordenadas precisas mientras se dibuja (touch); se redondean al guardar. */
+export function normalizarPuntoFino(x: number, y: number, w: number, h: number) {
+  return { x: (x / w) * 1000, y: (y / h) * 1000 }
+}
+
 export function ptsAString(points: { x: number; y: number }[]) {
-  return points.map((p) => `${p.x},${p.y}`).join(" ")
+  return points.map((p) => `${Math.round(p.x)},${Math.round(p.y)}`).join(" ")
 }
 
 export function ptsDesdeString(pts: string): { x: number; y: number }[] {
