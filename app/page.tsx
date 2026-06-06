@@ -40,6 +40,7 @@ import {
   getFechasSemana,
   getSemanaActual,
 } from "@/lib/semana"
+import { getPdfUrl, semanaTieneLeccion } from "@/lib/pdfUrls"
 import {
   anunciarEntradaChat,
   getChatSessionId,
@@ -48,6 +49,7 @@ import {
 } from "@/lib/chat"
 import { desbloquearSonidosEnInteraccion } from "@/lib/audioClase"
 import { useMediaLg } from "@/hooks/useMediaLg"
+import { useCabeceraCompacta } from "@/hooks/useCabeceraCompacta"
 import { CHAT_ABRIR_EVENT, CHAT_NO_LEIDOS_EVENT } from "@/lib/chatNotificaciones"
 import { prepararSonidoChat } from "@/lib/chatNotificaciones"
 import {
@@ -60,6 +62,9 @@ import {
 } from "@/lib/compartirNotas"
 
 const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false })
+const LeccionTextoViewer = dynamic(() => import("@/components/LeccionTextoViewer"), {
+  ssr: false,
+})
 
 type MobileTab = "pdf" | "estudio" | "chat"
 
@@ -70,7 +75,6 @@ export default function Home() {
   const [preferenciasCompartir, setPreferenciasCompartir] = useState<PreferenciaCompartir[]>([])
   const [editFecha, setEditFecha] = useState<string | null>(null)
   const [editTexto, setEditTexto] = useState("")
-  const [BibliaPasaje, setBibliaPasaje] = useState("")
   const [semana, setSemana] = useState(() => getSemanaActual())
   const [tipo, setTipo] = useState("leccion")
   const [notasClase, setNotasClase] = useState<Record<string, NotaClase>>({})
@@ -96,16 +100,12 @@ export default function Home() {
     titulo: string
   } | null>(null)
   const isLg = useMediaLg()
+  const compactoTablet = useCabeceraCompacta()
 
   function formatDateDMY(dateStr: string) {
     if (!dateStr) return ""
     const [year, month, day] = dateStr.split("-")
     return `${day}/${month}/${year}`
-  }
-
-  function agregarVersiculo(v: string) {
-    setBibliaPasaje(v)
-    setMobileTab("pdf")
   }
 
   const claseId = sesion?.claseId ?? ""
@@ -456,11 +456,12 @@ export default function Home() {
   const irALeccionDelDia = useCallback(() => {
     setMaterialMaestroPdf(null)
     setTipo("leccion")
+    setSelectedDate(getFechaDestacadaEnSemana(semana))
     setLeccionJump((n) => n + 1)
     setMobileTab("pdf")
-  }, [])
+  }, [semana])
 
-  const pdfUrl = `/pdfs/semana${semana}/${tipo === "leccion" ? "leccion" : tipo}.pdf`
+  const pdfUrl = getPdfUrl(semana, tipo)
   const pdfUrlActivo = materialMaestroPdf?.url ?? pdfUrl
   const pdfViewerKey = materialMaestroPdf
     ? `maestro-${materialMaestroPdf.url}`
@@ -508,21 +509,6 @@ export default function Home() {
             )}
           </div>
         )}
-        {BibliaPasaje && (
-          <div className="border-b border-accent/30 bg-accent-soft px-5 py-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-primary/70 mb-1">
-              Pasaje seleccionado
-            </p>
-            <p className="text-sm leading-relaxed text-slate-800 whitespace-pre-line">{BibliaPasaje}</p>
-            <button
-              type="button"
-              onClick={() => setBibliaPasaje("")}
-              className="mt-2 text-xs text-primary hover:underline"
-            >
-              Cerrar
-            </button>
-          </div>
-        )}
         <div className="layout-pdf-viewport flex min-h-0 flex-1 flex-col overflow-hidden">
           <MobilePdfControls scrollKey={pdfViewerKey}>
             <LeccionControls
@@ -531,16 +517,26 @@ export default function Home() {
               tipo={tipo}
               setTipo={setTipo}
               onLeccionClick={irALeccionDelDia}
+              compacto={compactoTablet}
             />
           </MobilePdfControls>
           <div className="layout-pdf-canvas relative min-h-0 flex-1 overflow-hidden">
             <PdfErrorBoundary url={pdfUrlActivo}>
-              <PdfViewer
-                key={pdfViewerKey}
-                url={pdfUrlActivo}
-                irAlDiaLectura={!materialMaestroPdf && tipo === "leccion"}
-                semana={semana}
-              />
+              {!materialMaestroPdf && tipo === "leccion" && semanaTieneLeccion(semana) ? (
+                <LeccionTextoViewer
+                  key={`texto-${semana}-${leccionJump}`}
+                  semana={semana}
+                  fechaInicial={selectedDate}
+                  onFechaChange={setSelectedDate}
+                />
+              ) : (
+                <PdfViewer
+                  key={pdfViewerKey}
+                  url={pdfUrlActivo}
+                  irAlDiaLectura={false}
+                  semana={semana}
+                />
+              )}
             </PdfErrorBoundary>
           </div>
         </div>
@@ -602,7 +598,7 @@ export default function Home() {
               onUnidoAClase={handleUnidoDesdeIndependiente}
             />
           )}
-          <Biblia agregarVersiculo={agregarVersiculo} />
+          <Biblia />
         </section>
 
         {isLg && chatClaseActiva && (

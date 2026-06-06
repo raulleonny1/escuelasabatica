@@ -6,6 +6,7 @@ import PizarraBannerButton from "@/components/PizarraBannerButton"
 import PwaInstallButton from "@/components/PwaInstallButton"
 import SalaAudioBanner from "@/components/SalaAudioBanner"
 import TextSizeControl from "@/components/TextSizeControl"
+import { useCabeceraCompacta } from "@/hooks/useCabeceraCompacta"
 import { useModoHorizontalMovil } from "@/hooks/useModoHorizontalMovil"
 import {
   esModoIndependiente,
@@ -17,6 +18,7 @@ import { cerrarSesion, leerSesion, type SesionUsuario } from "@/lib/sesionUsuari
 export default function AppHeader() {
   const [sesion, setSesion] = useState<SesionUsuario | null>(null)
   const horizontal = useModoHorizontalMovil()
+  const compacto = useCabeceraCompacta()
 
   useEffect(() => {
     const sync = () => setSesion(leerSesion())
@@ -61,18 +63,40 @@ export default function AppHeader() {
   const herramientas = (
     <>
       {!independiente && <PizarraBannerButton />}
-      <ChatEnLineaIndicador compacto={horizontal} />
+      <ChatEnLineaIndicador compacto={horizontal || compacto} />
       <TextSizeControl variant="header" />
       <PwaInstallButton />
       <button
         type="button"
         onClick={handleMenuPrincipal}
-        className="rounded-lg border border-white/25 bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white backdrop-blur-sm hover:bg-white/20 sm:px-3 sm:py-1.5 sm:text-xs"
+        className="rounded-lg border border-white/25 bg-white/10 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm hover:bg-white/20 sm:px-2.5 sm:py-1.5 sm:text-xs"
       >
-        {horizontal ? "Menú" : "Menú principal"}
+        {horizontal || compacto ? "Menú" : "Menú principal"}
       </button>
     </>
   )
+
+  const sesionLinea = sesion && (
+    <span className="truncate">
+      <span className="font-semibold text-accent">{rolLabel}</span>
+      <span className="text-white/45"> · </span>
+      <span className="font-medium text-white">{sesion.nombre}</span>
+      {!independiente && sesion.claseNombre && (
+        <>
+          <span className="text-white/45"> · </span>
+          <span className="text-blue-100/90">{sesion.claseNombre}</span>
+        </>
+      )}
+      {independiente && (
+        <>
+          <span className="text-white/45"> · </span>
+          <span className="text-blue-100/75">estudio personal</span>
+        </>
+      )}
+    </span>
+  )
+
+  const mostrarCompacto = compacto && !horizontal
 
   return (
     <header className="app-header relative shrink-0 overflow-hidden bg-gradient-to-r from-primary-dark via-primary to-primary-light text-white shadow-lg">
@@ -81,15 +105,13 @@ export default function AppHeader() {
         aria-hidden
       />
 
-      {/* Cabecera compacta: móvil horizontal */}
+      {/* Móvil horizontal — una fila */}
       {horizontal && sesion && (
-        <div className="relative border-b-4 border-accent px-2 py-1.5 sm:px-3">
+        <div className="relative border-b-2 border-accent px-2 py-1.5 sm:px-3">
           <div className="flex items-center gap-2">
             <div className="min-w-0 flex-1">
               <p className="truncate font-display text-sm font-semibold">Escuela Sabática</p>
-              <p className="truncate text-[10px] text-blue-100/85">
-                {rolLabel}: {sesion.nombre}
-              </p>
+              <p className="truncate text-[10px] text-blue-100/85">{sesionLinea}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
               {herramientas}
@@ -98,10 +120,37 @@ export default function AppHeader() {
         </div>
       )}
 
-      {/* Cabecera normal: vertical o escritorio */}
+      {/* iPad / tablet — compacto, máximo espacio al visor */}
+      {mostrarCompacto && sesion && (
+        <div className="relative border-b-2 border-accent px-2 py-1.5 sm:px-3">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-display text-base font-semibold leading-tight sm:text-lg">
+                Escuela Sabática
+              </h1>
+              <p className="truncate text-[10px] leading-snug text-blue-100/90 sm:text-[11px]">
+                {sesionLinea}
+              </p>
+            </div>
+            <div className="relative hidden h-9 w-12 shrink-0 sm:block md:h-10 md:w-16">
+              {portada}
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+              {herramientas}
+            </div>
+          </div>
+          {!independiente && (
+            <div className="mt-1.5 flex items-center gap-2 overflow-x-auto">
+              <SalaAudioBanner compacto />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Escritorio amplio */}
       <div
         className={`relative border-b-4 border-accent px-3 py-3 sm:px-5 md:px-8 md:py-4 ${
-          horizontal && sesion ? "hidden" : ""
+          (horizontal && sesion) || mostrarCompacto ? "hidden" : ""
         }`}
       >
         <div className="flex items-start justify-between gap-3 md:gap-6">

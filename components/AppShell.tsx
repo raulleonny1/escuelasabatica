@@ -43,8 +43,8 @@ function ShellInterior({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <CabeceraEnvolvente />
-      <main className="app-main flex min-h-0 flex-1 overflow-hidden bg-surface p-2 md:p-4">
-        <div className="app-main-inner mx-auto flex h-full min-h-0 w-full max-w-[1800px] overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+      <main className="app-main flex min-h-0 flex-1 overflow-hidden bg-surface p-1 md:p-2 lg:p-4">
+        <div className="app-main-inner mx-auto flex h-full min-h-0 w-full max-w-[1800px] overflow-hidden rounded-xl border border-border bg-card shadow-xl lg:rounded-2xl">
           {children}
         </div>
       </main>

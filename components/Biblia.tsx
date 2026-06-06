@@ -12,16 +12,12 @@ import {
   ordenarLibros,
 } from "@/lib/biblia"
 
-interface BibliaProps {
-  agregarVersiculo?: (v: string) => void
-}
-
 const selectClass =
   "w-full rounded-lg border border-border bg-white px-3 py-3 text-base text-slate-700 shadow-sm focus:border-primary-light focus:outline-none focus:ring-2 focus:ring-primary/20 transition md:py-2 md:text-sm"
 
 const RVR_URL = "/biblia/rvr1909.json"
 
-export default function Biblia({ agregarVersiculo }: BibliaProps) {
+export default function Biblia() {
   const [biblia, setBiblia] = useState<BibliaData>({})
   const [libro, setLibro] = useState("")
   const [capitulo, setCapitulo] = useState("")
@@ -160,35 +156,19 @@ export default function Biblia({ agregarVersiculo }: BibliaProps) {
       )}
 
       {libro && capitulo && versiculos.length > 0 && (
-        <>
-          <p className="text-xs text-muted">
-            Toca un versículo para verlo en el banner junto a la lección
-          </p>
-          <div className="space-y-1 border-t border-border pt-2">
-            {versiculos.map((v) => (
-              <p
-                key={v}
-                role="button"
-                tabIndex={0}
-                className="cursor-pointer rounded-lg px-2 py-3 text-base leading-relaxed text-slate-700 transition hover:bg-accent-soft/60 active:bg-accent-soft active:text-primary md:py-1.5 md:text-sm"
-                onClick={() =>
-                  agregarVersiculo?.(`${libro} ${capitulo}:${v} - ${biblia[libro][capitulo][v]}`)
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    agregarVersiculo?.(`${libro} ${capitulo}:${v} - ${biblia[libro][capitulo][v]}`)
-                  }
-                }}
-              >
-                <span className="mr-2 inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary/10 px-1 text-xs font-semibold text-primary">
-                  {v}
-                </span>
-                {biblia[libro][capitulo][v]}
-              </p>
-            ))}
-          </div>
-        </>
+        <div className="space-y-1 border-t border-border pt-2">
+          {versiculos.map((v) => (
+            <p
+              key={v}
+              className="px-2 py-3 text-base leading-relaxed text-slate-700 md:py-1.5 md:text-sm"
+            >
+              <span className="mr-2 inline-flex h-5 min-w-5 items-center justify-center rounded bg-primary/10 px-1 text-xs text-primary">
+                {v}
+              </span>
+              {biblia[libro][capitulo][v]}
+            </p>
+          ))}
+        </div>
       )}
 
       {libro && capitulo && versiculos.length === 0 && (

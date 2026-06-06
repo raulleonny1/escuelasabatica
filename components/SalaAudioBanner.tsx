@@ -35,7 +35,7 @@ const ANCHO_BARRA = "w-[19rem]"
 const ANCHO_CONTROLES = "w-[8.75rem]"
 
 /** Audio en vivo: caja de tamaño fijo; botones anclados a la derecha. */
-export default function SalaAudioBanner() {
+export default function SalaAudioBanner({ compacto = false }: { compacto?: boolean }) {
   const sala = useSalaAudioOptional()
   const peerId = useMemo(() => getChatSessionId(), [])
 
@@ -60,17 +60,27 @@ export default function SalaAudioBanner() {
 
   if (!enSala && !conectando && !error) {
     return (
-      <div className="inline-flex w-fit max-w-full items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-sm">
-        <span className="text-base leading-none" aria-hidden>
+      <div
+        className={`inline-flex w-fit max-w-full items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 backdrop-blur-sm ${
+          compacto ? "px-2 py-1" : "gap-2 rounded-xl px-3 py-2"
+        }`}
+      >
+        <span className="text-sm leading-none" aria-hidden>
           🎙️
         </span>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-accent sm:text-xs">
-          Audio de la clase
+        <p
+          className={`font-semibold uppercase tracking-wide text-accent ${
+            compacto ? "text-[10px]" : "text-[11px] sm:text-xs"
+          }`}
+        >
+          {compacto ? "Audio" : "Audio de la clase"}
         </p>
         <button
           type="button"
           onClick={() => void entrarSala()}
-          className="h-8 shrink-0 rounded-lg bg-accent px-3 text-xs font-bold text-primary-dark shadow-sm active:opacity-90"
+          className={`shrink-0 rounded-lg bg-accent font-bold text-primary-dark shadow-sm active:opacity-90 ${
+            compacto ? "h-7 px-2 text-[10px]" : "h-8 px-3 text-xs"
+          }`}
         >
           Unirse
         </button>
@@ -78,10 +88,15 @@ export default function SalaAudioBanner() {
     )
   }
 
+  const anchoBarra = compacto ? "w-[14rem]" : ANCHO_BARRA
+  const anchoControles = compacto ? "w-[7.5rem]" : ANCHO_CONTROLES
+
   return (
-    <div className={`${ANCHO_BARRA} max-w-full shrink-0`}>
+    <div className={`${anchoBarra} max-w-full shrink-0`}>
       <div
-        className={`relative h-10 rounded-xl border backdrop-blur-sm ${
+        className={`relative rounded-xl border backdrop-blur-sm ${
+          compacto ? "h-8" : "h-10"
+        } ${
           enSala
             ? "border-emerald-400/40 bg-emerald-500/15"
             : "border-white/20 bg-white/10"
@@ -90,7 +105,7 @@ export default function SalaAudioBanner() {
         {/* Info + micrófonos de participantes (zona izquierda, sin empujar botones) */}
         <div
           className="absolute inset-y-0 left-0 flex items-center gap-2 overflow-hidden pl-3"
-          style={{ right: "8.75rem" }}
+          style={{ right: compacto ? "7.5rem" : "8.75rem" }}
         >
           <span
             className={`h-2 w-2 shrink-0 rounded-full ${
@@ -117,13 +132,15 @@ export default function SalaAudioBanner() {
 
         {/* Controles fijos a la derecha — nunca se mueven */}
         <div
-          className={`absolute inset-y-0 right-0 flex ${ANCHO_CONTROLES} items-center justify-end gap-1.5 border-l border-white/15 px-2`}
+          className={`absolute inset-y-0 right-0 flex ${anchoControles} items-center justify-end gap-1 border-l border-white/15 px-1.5`}
         >
           <button
             type="button"
             onClick={() => void toggleSilencio()}
             disabled={!enSala || conectando}
-            className={`flex h-8 w-[4.5rem] shrink-0 items-center justify-center gap-1 rounded-lg text-[11px] font-semibold active:opacity-90 disabled:opacity-50 ${
+            className={`flex shrink-0 items-center justify-center gap-1 rounded-lg font-semibold active:opacity-90 disabled:opacity-50 ${
+              compacto ? "h-7 w-[3.75rem] text-[10px]" : "h-8 w-[4.5rem] text-[11px]"
+            } ${
               silenciado ? "bg-amber-400 text-amber-950" : "bg-white/15 text-white"
             }`}
             aria-pressed={silenciado}
@@ -135,7 +152,9 @@ export default function SalaAudioBanner() {
             type="button"
             onClick={() => void salirSala()}
             disabled={conectando}
-            className="flex h-8 w-[3.25rem] shrink-0 items-center justify-center rounded-lg bg-red-500/90 text-[11px] font-semibold text-white active:opacity-90 disabled:opacity-50"
+            className={`flex shrink-0 items-center justify-center rounded-lg bg-red-500/90 font-semibold text-white active:opacity-90 disabled:opacity-50 ${
+              compacto ? "h-7 w-[2.75rem] text-[10px]" : "h-8 w-[3.25rem] text-[11px]"
+            }`}
           >
             Salir
           </button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useLecturaUiOptional } from "@/components/LecturaUiContext"
+import { useCabeceraCompacta } from "@/hooks/useCabeceraCompacta"
 
 interface MobilePdfControlsProps {
   children: ReactNode
@@ -15,6 +16,7 @@ const PAUSA_MS = 280
 
 export default function MobilePdfControls({ children, scrollKey }: MobilePdfControlsProps) {
   const [oculto, setOculto] = useState(false)
+  const compacto = useCabeceraCompacta()
   const lecturaUi = useLecturaUiOptional()
   const ocultoRef = useRef(false)
   const lastY = useRef(0)
@@ -109,7 +111,7 @@ export default function MobilePdfControls({ children, scrollKey }: MobilePdfCont
           : "max-h-[40vh] translate-y-0 opacity-100"
       }`}
     >
-      <div className="space-y-2 p-2">{children}</div>
+      <div className={compacto ? "p-1" : "space-y-2 p-2"}>{children}</div>
     </div>
   )
 }
