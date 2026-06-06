@@ -662,17 +662,45 @@ html[data-lectura="1"] .pdf-zoom-bar {
   pointer-events: none;
 }
 
-.leccion-ink-capa {
+.leccion-ink-capas {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
   mix-blend-mode: multiply;
+  -webkit-touch-callout: none;
+}
+
+.leccion-ink-gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  display: block;
 }
 
 .leccion-ink-capa-activa {
   pointer-events: auto;
+}
+
+.leccion-ink-capa-activa .leccion-ink-gl {
+  pointer-events: auto;
   touch-action: none;
+}
+
+.leccion-ink-fallback {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 0.7rem;
+  color: #64748b;
+  pointer-events: none;
 }
 
 .leccion-lienzo-tinta .leccion-pagina,

@@ -34,13 +34,16 @@ export class MotorPizarraWebGL {
   private w = 0
   private h = 0
   private dpr = 1
+  private fondoTransparente: boolean
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, opts?: { fondoTransparente?: boolean }) {
+    this.fondoTransparente = opts?.fondoTransparente ?? false
     const gl = canvas.getContext("webgl2", {
-      alpha: false,
+      alpha: this.fondoTransparente,
       antialias: true,
       desynchronized: true,
       powerPreference: "high-performance",
+      premultipliedAlpha: false,
     })
     if (!gl) throw new Error("WebGL2 no disponible")
     this.gl = gl
@@ -135,8 +138,14 @@ export class MotorPizarraWebGL {
   render(ordenIds: string[], overlayIds: string[] = []) {
     const gl = this.gl
     const { w, h } = this.resolucionDispositivo
-    gl.clearColor(...COLOR_FONDO_PIZARRA)
+    if (this.fondoTransparente) {
+      gl.clearColor(0, 0, 0, 0)
+    } else {
+      gl.clearColor(...COLOR_FONDO_PIZARRA)
+    }
     gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
     gl.useProgram(this.program)
     gl.uniform2f(this.locResolution, w, h)
 

@@ -1,0 +1,71 @@
+/** Entrada de tinta de alta frecuencia (estilo Google Keep / Pointer Events). */
+
+export type PuntoInk = [number, number, number]
+
+export function presionDesdePointer(e: PointerEvent): number {
+  if (e.pointerType === "pen") {
+    return e.pressure > 0 && e.pressure <= 1 ? e.pressure : 0.45
+  }
+  if (e.pointerType === "mouse") {
+    return 0.5
+  }
+  return 0.42
+}
+
+export function puntoDesdePointer(e: PointerEvent, rect: DOMRect): PuntoInk {
+  return [
+    e.clientX - rect.left,
+    e.clientY - rect.top,
+    presionDesdePointer(e),
+  ]
+}
+
+/** Todos los muestreos del lápiz (240 Hz) dentro de un pointermove. */
+export function puntosCoalescidos(e: PointerEvent, rect: DOMRect): PuntoInk[] {
+  const crudos =
+    typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : []
+  const eventos = crudos.length > 0 ? crudos : [e]
+  return eventos.map((ev) => puntoDesdePointer(ev, rect))
+}
+
+/** Puntos predichos por el SO — solo para vista previa, no se guardan. */
+export function puntosPredichos(e: PointerEvent, rect: DOMRect): PuntoInk[] {
+  if (typeof e.getPredictedEvents !== "function") return []
+  return e.getPredictedEvents().map((ev) => puntoDesdePointer(ev, rect))
+}
+
+export function agregarPuntosInk(
+  actual: PuntoInk[],
+  nuevos: PuntoInk[],
+  minDist = 0.6
+): PuntoInk[] {
+  if (nuevos.length === 0) return actual
+  const out = [...actual]
+  for (const p of nuevos) {
+    const ultimo = out[out.length - 1]
+    if (ultimo && Math.hypot(p[0] - ultimo[0], p[1] - ultimo[1]) < minDist) continue
+    out.push(p)
+  }
+  return out
+}
+
+export function trazoUsaPresionReal(points: PuntoInk[]): boolean {
+  return points.some((p) => p[2] > 0.05 && p[2] < 0.98 && p[2] !== 0.5)
+}
+
+export function esEntradaDibujo(e: PointerEvent): boolean {
+  if (e.pointerType === "pen") return true
+  if (e.pointerType === "mouse") return e.buttons === 1
+  if (e.pointerType === "touch") return true
+  return false
+}
+
+export function crearContextoTinta(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
+  return (
+    canvas.getContext("2d", {
+      alpha: true,
+      desynchronized: true,
+      willReadFrequently: false,
+    }) ?? canvas.getContext("2d")
+  )
+}
