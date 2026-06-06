@@ -1,10 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { usePizarraOptional } from "@/components/PizarraContext"
-import PizarraInkCanvas from "@/components/PizarraInkCanvas"
+import type { PizarraInkCanvasRef } from "@/components/PizarraInkCanvas"
 import { leerSesion } from "@/lib/sesionUsuario"
 import type { HerramientaPizarra } from "@/lib/pizarraClase"
+
+const PizarraInkCanvas = dynamic(() => import("@/components/PizarraInkCanvas"), {
+  ssr: false,
+  loading: () => (
+    <div className="relative min-h-0 flex-1 bg-[#faf8f3] flex items-center justify-center text-sm text-slate-500">
+      Preparando pizarra…
+    </div>
+  ),
+})
 
 const COLORES = ["#1e293b", "#dc2626", "#2563eb", "#16a34a"] as const
 const GROSORES = [2, 4, 7] as const
@@ -18,6 +28,9 @@ function esDispositivoTactil() {
 
 export default function PizarraOverlay({ claseId }: { claseId: string }) {
   const pizarra = usePizarraOptional()
+  const lienzoRef = useRef<PizarraInkCanvasRef>(null)
+  const [puedeUndo, setPuedeUndo] = useState(false)
+  const [puedeRedo, setPuedeRedo] = useState(false)
 
   const [color, setColor] = useState<string>(COLORES[0])
   const [grosor, setGrosor] = useState<number>(() => (esDispositivoTactil() ? GROSORES[2] : GROSORES[1]))
@@ -210,6 +223,26 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
             <button
               type="button"
+              onClick={() => lienzoRef.current?.undo()}
+              disabled={!puedeUndo}
+              className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-semibold disabled:opacity-40"
+              title="Deshacer"
+            >
+              ↶
+            </button>
+
+            <button
+              type="button"
+              onClick={() => lienzoRef.current?.redo()}
+              disabled={!puedeRedo}
+              className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-semibold disabled:opacity-40"
+              title="Rehacer"
+            >
+              ↷
+            </button>
+
+            <button
+              type="button"
               onClick={() => void pizarra.limpiarTablero()}
               className="rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-semibold"
               title="Borra solo la pantalla actual"
@@ -239,6 +272,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
       </div>
 
       <PizarraInkCanvas
+        ref={lienzoRef}
         claseId={claseId}
         paginaActual={paginaActual}
         esMaestro={esMaestro}
@@ -249,6 +283,10 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
         grosor={grosor}
         grosorBorrador={grosorBorrador}
         limpiarEn={pizarra.estado?.limpiarEn}
+        onUndoRedoChange={(u, r) => {
+          setPuedeUndo(u)
+          setPuedeRedo(r)
+        }}
       />
 
       {!esMaestro && totalPaginas > 1 && (
@@ -265,7 +303,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
 
       {esMaestro && herramienta === "lapiz" && (
         <p className="shrink-0 bg-primary/90 px-3 py-1.5 text-center text-[10px] text-blue-100/90">
-          Motor de tinta WebGL · Apple Pencil con presión e inclinación · dedo ignorado
+          Solo Apple Pencil · tinta vectorial WebGL · presión e inclinación · predicción de trazo
         </p>
       )}
 

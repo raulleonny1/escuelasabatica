@@ -93,24 +93,32 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
   }, [])
 
   useEffect(() => {
-    let cancelado = false
-    setPaginaLista(false)
-    setPaginaInicial(0)
-
     if (!irAlDiaLectura || !semana) {
       setPaginaLista(true)
       return
     }
 
+    let cancelado = false
+    setPaginaLista(false)
+    setPaginaInicial(0)
+
     async function resolverPagina() {
+      const limiteMs = touchMode ? 5000 : 12000
+      const conTiempo = <T,>(promise: Promise<T>, fallback: T): Promise<T> =>
+        Promise.race([
+          promise,
+          new Promise<T>((resolve) => window.setTimeout(() => resolve(fallback), limiteMs)),
+        ])
+
       try {
         const pdfjs = await import("pdfjs-dist")
         pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js"
-        const doc = await pdfjs.getDocument(url).promise
+        const doc = await conTiempo(pdfjs.getDocument(url).promise, null)
+        if (!doc || cancelado) return
         const fecha = getFechaLecturaParaSemana(semana!)
-        const index = await findPageIndexForDay(doc, fecha)
+        const index = await conTiempo(findPageIndexForDay(doc, fecha), 0)
         if (!cancelado) setPaginaInicial(index)
-        await doc.destroy()
+        await doc.destroy().catch(() => {})
       } catch {
         if (!cancelado) setPaginaInicial(0)
       } finally {
@@ -118,11 +126,11 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
       }
     }
 
-    resolverPagina()
+    void resolverPagina()
     return () => {
       cancelado = true
     }
-  }, [url, irAlDiaLectura, semana])
+  }, [url, irAlDiaLectura, semana, touchMode])
 
   useEffect(() => {
     const root = shellRef.current
@@ -187,8 +195,9 @@ export default function PdfViewer({ url, irAlDiaLectura, semana }: PdfViewerProp
 
   if (!montado || !paginaLista) {
     return (
-      <div className="pdf-viewer-shell flex items-center justify-center">
+      <div className="pdf-viewer-shell flex flex-col items-center justify-center gap-2 p-4 text-sm text-slate-500">
         <span className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <span>Preparando lección…</span>
       </div>
     )
   }

@@ -83,8 +83,10 @@ export default function Home() {
   const [guardando, setGuardando] = useState(false)
   const [mobileTab, setMobileTab] = useState<MobileTab>("pdf")
   const [leccionJump, setLeccionJump] = useState(0)
-  const [sesion, setSesion] = useState<SesionUsuario | null>(null)
-  const [sesionListo, setSesionListo] = useState(false)
+  const [sesion, setSesion] = useState<SesionUsuario | null>(() =>
+    typeof window !== "undefined" ? leerSesion() : null
+  )
+  const [sesionListo, setSesionListo] = useState(() => typeof window !== "undefined")
   const [chatNoLeidos, setChatNoLeidos] = useState(0)
   const [guiaMaestro, setGuiaMaestro] = useState<GuiaClase | null>(null)
   const ultimaGuiaMs = useRef(0)
@@ -236,6 +238,10 @@ export default function Home() {
     let migrado = false
     setCargandoClase(true)
 
+    const timeout = window.setTimeout(() => {
+      setCargandoClase(false)
+    }, 12000)
+
     const unsubscribe = subscribeComentariosClase(
       claseId,
       async (data) => {
@@ -247,6 +253,7 @@ export default function Home() {
             } catch {
               setNotasClase(local)
               setSyncError("Sin conexión. Mostrando notas de clase guardadas aquí.")
+              setCargandoClase(false)
             }
             migrado = true
             return
@@ -264,7 +271,10 @@ export default function Home() {
       }
     )
 
-    return () => unsubscribe()
+    return () => {
+      window.clearTimeout(timeout)
+      unsubscribe()
+    }
   }, [claseId])
 
   useEffect(() => {

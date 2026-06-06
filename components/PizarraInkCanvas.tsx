@@ -10,17 +10,20 @@ import {
 } from "react"
 import { MotorPizarraWebGL } from "@/lib/pizarraWebGL"
 import {
-  agregarPuntoTinta,
-  aplicarBorradoVectorial,
-  esEntradaValidaPizarra,
-  mallaDesdeTrazo,
-  muestrearPuntero,
-  predecirPuntosTinta,
-  resolverTrazoTinta,
-  trazoFirestoreATinta,
-  trazoTintaAFirestore,
-  type PuntoTinta,
-  type TrazoTinta,
+  agregarPuntoInk,
+  borrarSegmentosInk,
+  esEntradaPen,
+  mallaDesdeStroke,
+  muestrearPunteroPen,
+  PilaUndoRedo,
+  predecirPuntosInk,
+  registrarLatenciaTinta,
+  resolverStrokeInk,
+  strokeFirestoreAInk,
+  strokeInkAFirestore,
+  type AccionPizarra,
+  type InkPoint,
+  type InkStroke,
 } from "@/lib/pizarraTinta"
 import {
   eliminarTrazosPizarra,
@@ -35,6 +38,10 @@ const ID_PREDICCION = "__prediccion__"
 
 export type PizarraInkCanvasRef = {
   forzarRender: () => void
+  undo: () => void
+  redo: () => void
+  puedeUndo: () => boolean
+  puedeRedo: () => boolean
 }
 
 type Props = {
@@ -49,6 +56,7 @@ type Props = {
   grosorBorrador: number
   limpiarEn?: number
   onTrazosChange?: (count: number) => void
+  onUndoRedoChange?: (puedeUndo: boolean, puedeRedo: boolean) => void
 }
 
 const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function PizarraInkCanvas(
@@ -64,26 +72,30 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     grosorBorrador,
     limpiarEn,
     onTrazosChange,
+    onUndoRedoChange,
   },
   ref
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const motorRef = useRef<MotorPizarraWebGL | null>(null)
-  const trazosRef = useRef<TrazoTinta[]>([])
-  const trazoActivo = useRef<PuntoTinta[]>([])
+  const trazosRef = useRef<InkStroke[]>([])
+  const trazoActivo = useRef<InkPoint[]>([])
   const pintando = useRef(false)
+  const penActivo = useRef(false)
   const pointerIdActivo = useRef<number | null>(null)
   const t0Trazo = useRef(0)
-  const [lapizDetectado, setLapizDetectado] = useState(false)
   const rafRender = useRef(0)
   const ultimoLimpiar = useRef(0)
   const dims = useRef({ w: 0, h: 0, dpr: 1 })
+  const mallasCache = useRef(new Map<string, string>())
+  const pilaUndo = useRef(new PilaUndoRedo())
+  const [webglOk, setWebglOk] = useState(true)
+  const [estadoPen, setEstadoPen] = useState<"esperando" | "activo">("esperando")
 
   const sincronizarDims = useCallback(() => {
     const wrap = wrapRef.current
-    const canvas = canvasRef.current
-    if (!wrap || !canvas) return false
+    if (!wrap) return false
     const rect = wrap.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) return false
     const dpr = Math.min(window.devicePixelRatio || 1, 3)
@@ -92,19 +104,39 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     return true
   }, [])
 
-  const reconstruirCapas = useCallback(() => {
+  const actualizarCapaStroke = useCallback(
+    (id: string, stroke: Parameters<typeof mallaDesdeStroke>[0] | null) => {
+      const motor = motorRef.current
+      if (!motor) return
+      const { w, h, dpr } = dims.current
+      if (!stroke || w <= 0) {
+        motor.eliminarCapa(id)
+        mallasCache.current.delete(id)
+        return
+      }
+      const sig = JSON.stringify(stroke.points.slice(-3)) + stroke.baseWidth
+      if (mallasCache.current.get(id) === sig && id !== ID_ACTIVO && id !== ID_PREDICCION) return
+      const malla = mallaDesdeStroke(stroke, w, h, dpr)
+      motor.actualizarCapa(id, malla)
+      mallasCache.current.set(id, sig)
+    },
+    []
+  )
+
+  const renderFrame = useCallback(() => {
     const motor = motorRef.current
-    const { w, h } = dims.current
-    if (!motor || w <= 0) return
+    if (!motor || dims.current.w <= 0) return
+
+    const { w, h, dpr } = dims.current
+    const ids = trazosRef.current.map((t) => t.id)
 
     for (const trazo of trazosRef.current) {
-      motor.actualizarCapa(trazo.id, mallaDesdeTrazo(trazo, w, h))
+      actualizarCapaStroke(trazo.id, trazo)
     }
 
-    let tienePrediccion = false
-
+    let overlays: string[] = []
     if (trazoActivo.current.length > 0) {
-      const preview = resolverTrazoTinta(
+      const preview = resolverStrokeInk(
         trazoActivo.current,
         herramienta,
         color,
@@ -113,29 +145,25 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
         paginaActual
       )
       if (preview) {
-        const malla = mallaDesdeTrazo({ id: ID_ACTIVO, orden: 0, ...preview }, w, h)
-        if (malla) motor.actualizarCapa(ID_ACTIVO, malla)
+        actualizarCapaStroke(ID_ACTIVO, preview)
+        overlays.push(ID_ACTIVO)
 
-        const pred = predecirPuntosTinta(trazoActivo.current)
-        if (pred.length > 0 && herramienta !== "borrador") {
-          const predPreview = resolverTrazoTinta(
-            [...trazoActivo.current, ...pred],
-            "lapiz",
-            color,
-            grosor,
-            grosorBorrador,
-            paginaActual
-          )
-          if (predPreview) {
-            const m = mallaDesdeTrazo({ id: ID_PREDICCION, orden: 0, ...predPreview }, w, h)
-            if (m) {
-              m.color = [m.color[0], m.color[1], m.color[2], 0.45]
-              motor.actualizarCapa(ID_PREDICCION, m)
-              tienePrediccion = true
+        if (herramienta !== "borrador") {
+          const pred = predecirPuntosInk(trazoActivo.current)
+          if (pred.length > 0) {
+            const predStroke = {
+              ...preview,
+              points: [...trazoActivo.current, ...pred],
             }
+            const m = mallaDesdeStroke(predStroke, w, h, dpr)
+            if (m) {
+              m.color = [m.color[0], m.color[1], m.color[2], 0.4]
+              motor.actualizarCapa(ID_PREDICCION, m)
+              overlays.push(ID_PREDICCION)
+            }
+          } else {
+            motor.eliminarCapa(ID_PREDICCION)
           }
-        } else {
-          motor.eliminarCapa(ID_PREDICCION)
         }
       }
     } else {
@@ -143,49 +171,128 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
       motor.eliminarCapa(ID_PREDICCION)
     }
 
-    const ids = trazosRef.current.map((t) => t.id)
     motor.podarCapas(new Set([...ids, ID_ACTIVO, ID_PREDICCION]))
-    const overlays: string[] = []
-    if (trazoActivo.current.length > 0) overlays.push(ID_ACTIVO)
-    if (tienePrediccion) overlays.push(ID_PREDICCION)
     motor.render(ids, overlays)
-  }, [color, grosor, grosorBorrador, herramienta, paginaActual])
+  }, [
+    actualizarCapaStroke,
+    color,
+    grosor,
+    grosorBorrador,
+    herramienta,
+    paginaActual,
+  ])
 
-  const programarRender = useCallback(() => {
-    cancelAnimationFrame(rafRender.current)
-    rafRender.current = requestAnimationFrame(() => {
-      if (!sincronizarDims()) return
-      reconstruirCapas()
-    })
-  }, [reconstruirCapas, sincronizarDims])
+  const programarRender = useCallback(
+    (inicio?: number) => {
+      cancelAnimationFrame(rafRender.current)
+      rafRender.current = requestAnimationFrame(() => {
+        if (!sincronizarDims()) return
+        renderFrame()
+        if (inicio != null) registrarLatenciaTinta(inicio, "pointermove→render")
+      })
+    },
+    [renderFrame, sincronizarDims]
+  )
 
-  useImperativeHandle(ref, () => ({ forzarRender: programarRender }), [programarRender])
+  const notificarUndoRedo = useCallback(() => {
+    onUndoRedoChange?.(pilaUndo.current.puedeUndo(), pilaUndo.current.puedeRedo())
+  }, [onUndoRedoChange])
+
+  const aplicarAccionInversa = useCallback(
+    async (accion: AccionPizarra, esUndo: boolean) => {
+      if (accion.tipo === "addStroke") {
+        if (esUndo) {
+          trazosRef.current = trazosRef.current.filter((t) => t.id !== accion.stroke.id)
+          await eliminarTrazosPizarra(claseId, [accion.stroke.id])
+        } else {
+          trazosRef.current = [...trazosRef.current, accion.stroke]
+          await guardarTrazoPizarra(claseId, strokeInkAFirestore(accion.stroke))
+        }
+      } else if (accion.tipo === "removeStroke") {
+        if (esUndo) {
+          trazosRef.current = [...trazosRef.current, accion.stroke]
+          await guardarTrazoPizarra(claseId, strokeInkAFirestore(accion.stroke))
+        } else {
+          trazosRef.current = trazosRef.current.filter((t) => t.id !== accion.stroke.id)
+          await eliminarTrazosPizarra(claseId, [accion.stroke.id])
+        }
+      } else if (accion.tipo === "splitStroke") {
+        if (esUndo) {
+          trazosRef.current = trazosRef.current
+            .filter((t) => !accion.strokes.some((s) => s.id === t.id))
+            .concat([accion.original])
+          await eliminarTrazosPizarra(claseId, accion.strokes.map((s) => s.id))
+          await guardarTrazoPizarra(claseId, strokeInkAFirestore(accion.original))
+        } else {
+          trazosRef.current = trazosRef.current
+            .filter((t) => t.id !== accion.original.id)
+            .concat(accion.strokes)
+          await eliminarTrazosPizarra(claseId, [accion.original.id])
+          for (const s of accion.strokes) {
+            await guardarTrazoPizarra(claseId, strokeInkAFirestore(s))
+          }
+        }
+      }
+      mallasCache.current.clear()
+      programarRender()
+      onTrazosChange?.(trazosRef.current.length)
+    },
+    [claseId, onTrazosChange, programarRender]
+  )
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      forzarRender: () => programarRender(),
+      undo: () => {
+        const a = pilaUndo.current.undo()
+        if (a) void aplicarAccionInversa(a, true)
+        notificarUndoRedo()
+      },
+      redo: () => {
+        const a = pilaUndo.current.redo()
+        if (a) void aplicarAccionInversa(a, false)
+        notificarUndoRedo()
+      },
+      puedeUndo: () => pilaUndo.current.puedeUndo(),
+      puedeRedo: () => pilaUndo.current.puedeRedo(),
+    }),
+    [aplicarAccionInversa, notificarUndoRedo, programarRender]
+  )
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !visible || !abierta) return
     try {
       motorRef.current = new MotorPizarraWebGL(canvas)
+      setWebglOk(true)
     } catch (e) {
-      console.error("WebGL2 no disponible para pizarra", e)
+      console.error("WebGL no disponible", e)
+      motorRef.current = null
+      setWebglOk(false)
     }
     programarRender()
     return () => {
       motorRef.current?.dispose()
       motorRef.current = null
+      mallasCache.current.clear()
     }
-  }, [abierta, visible, programarRender])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierta, visible])
 
   useEffect(() => {
     if (!claseId || !abierta || !visible) return
     trazosRef.current = []
     trazoActivo.current = []
+    pilaUndo.current.limpiar()
+    mallasCache.current.clear()
     return subscribeTrazosPizarra(claseId, paginaActual, (trazos: TrazoPizarra[]) => {
       if (pintando.current) return
       trazosRef.current = trazos
         .filter((t) => t.herramienta !== "borrador")
-        .map(trazoFirestoreATinta)
+        .map(strokeFirestoreAInk)
       onTrazosChange?.(trazosRef.current.length)
+      mallasCache.current.clear()
       programarRender()
     })
   }, [claseId, abierta, visible, paginaActual, programarRender, onTrazosChange])
@@ -195,16 +302,20 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
       ultimoLimpiar.current = limpiarEn
       trazosRef.current = []
       trazoActivo.current = []
+      pilaUndo.current.limpiar()
       motorRef.current?.limpiarCapas()
+      mallasCache.current.clear()
       programarRender()
+      notificarUndoRedo()
     }
-  }, [limpiarEn, programarRender])
+  }, [limpiarEn, notificarUndoRedo, programarRender])
 
   useEffect(() => {
     if (!abierta || !visible) return
     const wrap = wrapRef.current
     if (!wrap) return
     const ro = new ResizeObserver(() => {
+      mallasCache.current.clear()
       if (!pintando.current) programarRender()
     })
     ro.observe(wrap)
@@ -212,50 +323,66 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     return () => ro.disconnect()
   }, [abierta, visible, programarRender])
 
+  function rechazarNoPen(e: React.PointerEvent) {
+    if (!esEntradaPen(e.pointerType)) {
+      e.preventDefault()
+      return true
+    }
+    if (penActivo.current && e.pointerType !== "pen") {
+      e.preventDefault()
+      return true
+    }
+    return false
+  }
+
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!esMaestro) return
-    if (!esEntradaValidaPizarra(e.pointerType)) return
-    if (e.pointerType === "mouse" && e.buttons !== 1) return
+    if (rechazarNoPen(e)) return
     if (pintando.current && pointerIdActivo.current !== e.pointerId) return
 
     e.preventDefault()
     e.currentTarget.setPointerCapture(e.pointerId)
     pointerIdActivo.current = e.pointerId
     pintando.current = true
-    setLapizDetectado(e.pointerType === "pen")
+    penActivo.current = true
+    setEstadoPen("activo")
     t0Trazo.current = performance.now()
 
     const rect = wrapRef.current!.getBoundingClientRect()
-    trazoActivo.current = [muestrearPuntero(e.nativeEvent, rect, t0Trazo.current)]
-    programarRender()
+    trazoActivo.current = [muestrearPunteroPen(e.nativeEvent, rect, t0Trazo.current)]
+    programarRender(performance.now())
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!esMaestro || !pintando.current || pointerIdActivo.current !== e.pointerId) return
-    if (!esEntradaValidaPizarra(e.pointerType)) return
+    if (rechazarNoPen(e)) return
     e.preventDefault()
 
+    const t0 = performance.now()
     const rect = wrapRef.current!.getBoundingClientRect()
     const eventos = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent]
     let cambio = false
     for (const ev of eventos) {
-      const p = muestrearPuntero(ev, rect, t0Trazo.current)
-      const next = agregarPuntoTinta(trazoActivo.current, p, e.pointerType === "pen" ? 0.4 : 0.8)
+      const p = muestrearPunteroPen(ev, rect, t0Trazo.current)
+      const next = agregarPuntoInk(trazoActivo.current, p, 0.3)
       if (next.length !== trazoActivo.current.length) {
         trazoActivo.current = next
         cambio = true
       }
     }
-    if (cambio) programarRender()
+    if (cambio) programarRender(t0)
   }
 
   async function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
     if (!esMaestro || pointerIdActivo.current !== e.pointerId) return
+    if (!esEntradaPen(e.pointerType)) return
     e.preventDefault()
 
     cancelAnimationFrame(rafRender.current)
     pintando.current = false
+    penActivo.current = false
     pointerIdActivo.current = null
+    setEstadoPen("esperando")
 
     const pts = [...trazoActivo.current]
     trazoActivo.current = []
@@ -263,17 +390,36 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     if (pts.length >= 1 && claseId) {
       if (herramienta === "borrador") {
         const antes = trazosRef.current
-        const despues = aplicarBorradoVectorial(antes, pts, grosorBorrador)
-        const eliminados = antes.filter((t) => !despues.some((d) => d.id === t.id))
-        trazosRef.current = despues
-        for (const t of eliminados) motorRef.current?.eliminarCapa(t.id)
-        if (eliminados.length) await eliminarTrazosPizarra(claseId, eliminados.map((t) => t.id))
+        const { trazos, eliminados, agregados, acciones } = borrarSegmentosInk(
+          antes,
+          pts,
+          grosorBorrador
+        )
+        trazosRef.current = trazos
+        for (const id of eliminados) {
+          motorRef.current?.eliminarCapa(id)
+          mallasCache.current.delete(id)
+        }
+        if (eliminados.length) await eliminarTrazosPizarra(claseId, eliminados)
+        for (const s of agregados) {
+          await guardarTrazoPizarra(claseId, strokeInkAFirestore(s))
+        }
+        for (const a of acciones) pilaUndo.current.push(a)
       } else {
-        const res = resolverTrazoTinta(pts, herramienta, color, grosor, grosorBorrador, paginaActual)
+        const res = resolverStrokeInk(pts, herramienta, color, grosor, grosorBorrador, paginaActual)
         if (res) {
-          await guardarTrazoPizarra(claseId, trazoTintaAFirestore(res))
+          const stroke: InkStroke = {
+            id: `t-local-${Date.now()}`,
+            orden: Date.now(),
+            ...res,
+          }
+          trazosRef.current = [...trazosRef.current, stroke]
+          mallasCache.current.clear()
+          await guardarTrazoPizarra(claseId, strokeInkAFirestore(res))
+          pilaUndo.current.push({ tipo: "addStroke", stroke })
         }
       }
+      notificarUndoRedo()
     }
 
     motorRef.current?.eliminarCapa(ID_ACTIVO)
@@ -285,7 +431,7 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     <div ref={wrapRef} className="pizarra-lienzo relative min-h-0 flex-1 bg-[#faf8f3]">
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 block h-full w-full"
+        className="absolute inset-0 block h-full w-full touch-none"
         style={{ touchAction: "none" }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -293,9 +439,16 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
         onPointerCancel={onPointerUp}
         onLostPointerCapture={onPointerUp}
       />
+      {!webglOk && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-red-50/90 p-4 text-center text-sm text-red-800">
+          WebGL no disponible en este dispositivo. La pizarra requiere aceleración GPU.
+        </div>
+      )}
       {esMaestro && (
-        <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-800/70 px-3 py-1 text-[10px] text-white">
-          {lapizDetectado ? "Apple Pencil · presión activa" : "Usa lápiz/stylus (dedo ignorado)"}
+        <div className="pointer-events-none absolute bottom-3 left-1/2 max-w-[90%] -translate-x-1/2 rounded-full bg-slate-800/75 px-3 py-1 text-center text-[10px] text-white">
+          {estadoPen === "activo"
+            ? "Apple Pencil · tinta vectorial GPU"
+            : "Solo Apple Pencil — dedo y mouse ignorados"}
         </div>
       )}
     </div>

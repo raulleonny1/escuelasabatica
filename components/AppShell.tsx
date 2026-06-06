@@ -1,13 +1,18 @@
 "use client"
 
 import { useEffect, useState, type ReactNode } from "react"
+import dynamic from "next/dynamic"
 import AppHeader from "@/components/AppHeader"
 import { LecturaUiProvider, useLecturaUiOptional } from "@/components/LecturaUiContext"
-import PizarraOverlay from "@/components/PizarraOverlay"
 import { PizarraProvider, usePizarraOptional } from "@/components/PizarraContext"
 import { SalaAudioProvider } from "@/components/SalaAudioContext"
 import { esModoIndependiente } from "@/lib/clase"
 import { leerSesion, type SesionUsuario } from "@/lib/sesionUsuario"
+
+const PizarraOverlay = dynamic(() => import("@/components/PizarraOverlay"), {
+  ssr: false,
+  loading: () => null,
+})
 
 function CabeceraEnvolvente() {
   const lectura = useLecturaUiOptional()

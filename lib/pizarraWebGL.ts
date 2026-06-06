@@ -18,12 +18,10 @@ void main() {
   outColor = u_color;
 }`
 
-export type CapaTrazoGPU = {
-  id: string
+type CapaGPU = {
   buffer: WebGLBuffer
   count: number
   color: [number, number, number, number]
-  erase: boolean
 }
 
 export class MotorPizarraWebGL {
@@ -31,10 +29,11 @@ export class MotorPizarraWebGL {
   private program: WebGLProgram
   private locResolution: WebGLUniformLocation
   private locColor: WebGLUniformLocation
-  private vao: WebGLVertexArrayObject
-  private capas = new Map<string, CapaTrazoGPU>()
+  private locPos: number
+  private capas = new Map<string, CapaGPU>()
   private w = 0
   private h = 0
+  private dpr = 1
 
   constructor(canvas: HTMLCanvasElement) {
     const gl = canvas.getContext("webgl2", {
@@ -49,7 +48,7 @@ export class MotorPizarraWebGL {
     const vs = this.compilarShader(gl.VERTEX_SHADER, VS)
     const fs = this.compilarShader(gl.FRAGMENT_SHADER, FS)
     const program = gl.createProgram()
-    if (!vs || !fs || !program) throw new Error("Error compilando shaders")
+    if (!vs || !fs || !program) throw new Error("Error compilando shaders WebGL")
     gl.attachShader(program, vs)
     gl.attachShader(program, fs)
     gl.linkProgram(program)
@@ -59,17 +58,7 @@ export class MotorPizarraWebGL {
     this.program = program
     this.locResolution = gl.getUniformLocation(program, "u_resolution")!
     this.locColor = gl.getUniformLocation(program, "u_color")!
-
-    const vao = gl.createVertexArray()
-    if (!vao) throw new Error("VAO error")
-    this.vao = vao
-    gl.bindVertexArray(vao)
-    const buf = gl.createBuffer()
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-    const loc = gl.getAttribLocation(program, "a_pos")
-    gl.enableVertexAttribArray(loc)
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
-    gl.bindVertexArray(null)
+    this.locPos = gl.getAttribLocation(program, "a_pos")
   }
 
   private compilarShader(type: number, src: string) {
@@ -89,8 +78,9 @@ export class MotorPizarraWebGL {
   resize(w: number, h: number, dpr: number) {
     this.w = w
     this.h = h
-    const cw = Math.floor(w * dpr)
-    const ch = Math.floor(h * dpr)
+    this.dpr = dpr
+    const cw = Math.max(1, Math.floor(w * dpr))
+    const ch = Math.max(1, Math.floor(h * dpr))
     const canvas = this.gl.canvas as HTMLCanvasElement
     if (canvas.width !== cw || canvas.height !== ch) {
       canvas.width = cw
@@ -102,7 +92,7 @@ export class MotorPizarraWebGL {
   }
 
   actualizarCapa(id: string, malla: MallaTinta | null) {
-    if (!malla || malla.vertices.length === 0) {
+    if (!malla || malla.vertices.length < 6) {
       this.eliminarCapa(id)
       return
     }
@@ -111,17 +101,10 @@ export class MotorPizarraWebGL {
     if (!capa) {
       const buffer = gl.createBuffer()
       if (!buffer) return
-      capa = {
-        id,
-        buffer,
-        count: 0,
-        color: malla.color,
-        erase: malla.modo === "erase",
-      }
+      capa = { buffer, count: 0, color: malla.color }
       this.capas.set(id, capa)
     }
     capa.color = malla.color
-    capa.erase = malla.modo === "erase"
     capa.count = malla.vertices.length / 2
     gl.bindBuffer(gl.ARRAY_BUFFER, capa.buffer)
     gl.bufferData(gl.ARRAY_BUFFER, malla.vertices, gl.DYNAMIC_DRAW)
@@ -145,36 +128,34 @@ export class MotorPizarraWebGL {
     }
   }
 
-  /** Render incremental: fondo + trazos + capas overlay (activo, predicción). */
+  get resolucionDispositivo() {
+    return { w: this.w * this.dpr, h: this.h * this.dpr }
+  }
+
   render(ordenIds: string[], overlayIds: string[] = []) {
     const gl = this.gl
-    const dpr = gl.canvas.width / this.w
+    const { w, h } = this.resolucionDispositivo
     gl.clearColor(...COLOR_FONDO_PIZARRA)
     gl.clear(gl.COLOR_BUFFER_BIT)
     gl.useProgram(this.program)
-    gl.uniform2f(this.locResolution, this.w * dpr, this.h * dpr)
-    gl.bindVertexArray(this.vao)
+    gl.uniform2f(this.locResolution, w, h)
 
-    const dibujarCapa = (id: string) => {
+    const dibujar = (id: string) => {
       const capa = this.capas.get(id)
-      if (!capa || capa.count < 3 || capa.erase) return
+      if (!capa || capa.count < 3) return
       gl.bindBuffer(gl.ARRAY_BUFFER, capa.buffer)
-      const loc = gl.getAttribLocation(this.program, "a_pos")
-      gl.enableVertexAttribArray(loc)
-      gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
+      gl.enableVertexAttribArray(this.locPos)
+      gl.vertexAttribPointer(this.locPos, 2, gl.FLOAT, false, 0, 0)
       gl.uniform4fv(this.locColor, capa.color)
       gl.drawArrays(gl.TRIANGLES, 0, capa.count)
     }
 
-    for (const id of ordenIds) dibujarCapa(id)
-    for (const id of overlayIds) dibujarCapa(id)
-
-    gl.bindVertexArray(null)
+    for (const id of ordenIds) dibujar(id)
+    for (const id of overlayIds) dibujar(id)
   }
 
   dispose() {
     this.limpiarCapas()
     this.gl.deleteProgram(this.program)
-    this.gl.deleteVertexArray(this.vao)
   }
 }

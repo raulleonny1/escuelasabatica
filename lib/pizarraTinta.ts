@@ -7,136 +7,162 @@ import {
   resolverTrazoConGesto,
 } from "./pizarraClase"
 
-/** Punto de tinta vectorial: coordenadas normalizadas 0–1000 + presión + tiempo. */
-export type PuntoTinta = {
+/** Punto de tinta vectorial (coordenadas normalizadas 0–1000). */
+export type InkPoint = {
   x: number
   y: number
-  p: number
-  t: number
-  tx?: number
-  ty?: number
+  pressure: number
+  time: number
+  tiltX: number
+  tiltY: number
 }
 
-export type TrazoTinta = Pick<
-  TrazoPizarra,
-  "id" | "color" | "grosor" | "herramienta" | "tipo" | "pagina" | "orden"
-> & {
-  puntos: PuntoTinta[]
+/** Trazo vectorial independiente — nunca rasterizado. */
+export type InkStroke = {
+  id: string
+  points: InkPoint[]
+  color: string
+  baseWidth: number
+  pagina: number
+  orden: number
+  herramienta: HerramientaPizarra
+  tipo: TipoTrazo
 }
 
 export type MallaTinta = {
   vertices: Float32Array
   color: [number, number, number, number]
-  modo: "fill" | "line" | "erase"
 }
 
-const BG: [number, number, number, number] = [250 / 255, 248 / 255, 243 / 255, 1]
+export type AccionPizarra =
+  | { tipo: "addStroke"; stroke: InkStroke }
+  | { tipo: "removeStroke"; stroke: InkStroke }
+  | { tipo: "splitStroke"; original: InkStroke; strokes: InkStroke[] }
 
-export function esEntradaValidaPizarra(pointerType: string): boolean {
-  return pointerType === "pen" || pointerType === "mouse"
+export const COLOR_FONDO_PIZARRA: [number, number, number, number] = [
+  250 / 255,
+  248 / 255,
+  243 / 255,
+  1,
+]
+
+const LATENCIA_WARN_MS = 20
+
+export function esEntradaPen(pointerType: string): boolean {
+  return pointerType === "pen"
 }
 
-export function muestrearPuntero(
+export function muestrearPunteroPen(
   e: PointerEvent,
   rect: DOMRect,
   t0: number
-): PuntoTinta {
+): InkPoint {
   const x = e.clientX - rect.left
   const y = e.clientY - rect.top
   const n = normalizarPuntoFino(x, y, rect.width, rect.height)
-  const p = e.pressure > 0 && e.pressure <= 1 ? e.pressure : 0.5
+  const pressure = e.pressure > 0 && e.pressure <= 1 ? e.pressure : 0.45
   return {
     x: n.x,
     y: n.y,
-    p,
-    t: Math.round(performance.now() - t0),
-    tx: e.tiltX || undefined,
-    ty: e.tiltY || undefined,
+    pressure,
+    time: Math.round(performance.now() - t0),
+    tiltX: e.tiltX ?? 0,
+    tiltY: e.tiltY ?? 0,
   }
 }
 
-export function agregarPuntoTinta(
-  pts: PuntoTinta[],
-  p: PuntoTinta,
-  minDist = 0.6
-): PuntoTinta[] {
+export function agregarPuntoInk(
+  pts: InkPoint[],
+  p: InkPoint,
+  minDist = 0.35
+): InkPoint[] {
   if (pts.length === 0) return [p]
   const last = pts[pts.length - 1]
   if (Math.hypot(p.x - last.x, p.y - last.y) < minDist) return pts
   return [...pts, p]
 }
 
-/** Predicción de trazo (1–2 frames) para reducir latencia percibida. */
-export function predecirPuntosTinta(pts: PuntoTinta[], frames = 2): PuntoTinta[] {
+/** Predicción con últimos 2–3 puntos. */
+export function predecirPuntosInk(pts: InkPoint[], frames = 2): InkPoint[] {
   if (pts.length < 2) return []
-  const a = pts[pts.length - 2]
-  const b = pts[pts.length - 1]
+  const n = Math.min(pts.length, 3)
+  const slice = pts.slice(-n)
+  const a = slice[slice.length - 2]
+  const b = slice[slice.length - 1]
   const vx = b.x - a.x
   const vy = b.y - a.y
-  const out: PuntoTinta[] = []
+  const out: InkPoint[] = []
   for (let i = 1; i <= frames; i++) {
     out.push({
-      x: b.x + vx * i * 0.82,
-      y: b.y + vy * i * 0.82,
-      p: b.p,
-      t: b.t + 12 * i,
-      tx: b.tx,
-      ty: b.ty,
+      x: b.x + vx * i * 0.85,
+      y: b.y + vy * i * 0.85,
+      pressure: b.pressure,
+      time: b.time + 10 * i,
+      tiltX: b.tiltX,
+      tiltY: b.tiltY,
     })
   }
   return out
 }
 
-export function ptsInkAString(points: PuntoTinta[]): string {
+export function registrarLatenciaTinta(inicio: number, etiqueta: string) {
+  const ms = performance.now() - inicio
+  if (ms > LATENCIA_WARN_MS) {
+    console.warn(`[pizarra] latencia ${etiqueta}: ${ms.toFixed(1)} ms`)
+  }
+}
+
+export function ptsInkAString(points: InkPoint[]): string {
   return points
-    .map((p) => {
-      const base = `${Math.round(p.x)},${Math.round(p.y)},${p.p.toFixed(2)},${p.t}`
-      if (p.tx != null && p.ty != null) return `${base},${Math.round(p.tx)},${Math.round(p.ty)}`
-      return base
-    })
+    .map(
+      (p) =>
+        `${Math.round(p.x)},${Math.round(p.y)},${p.pressure.toFixed(2)},${p.time},${Math.round(p.tiltX)},${Math.round(p.tiltY)}`
+    )
     .join(";")
 }
 
-export function ptsInkDesdeString(pts: string): PuntoTinta[] {
+export function ptsInkDesdeString(pts: string): InkPoint[] {
   if (!pts.trim()) return []
   if (!pts.includes(";") && pts.includes(" ")) {
-    return ptsDesdeString(pts).map((p, i) => ({ ...p, p: 0.5, t: i * 16 }))
+    return ptsDesdeString(pts).map((p, i) => ({
+      x: p.x,
+      y: p.y,
+      pressure: 0.5,
+      time: i * 16,
+      tiltX: 0,
+      tiltY: 0,
+    }))
   }
   return pts.split(";").map((par) => {
     const parts = par.split(",").map(Number)
-    const [x, y, pr = 0.5, t = 0, tx, ty] = parts
-    const punto: PuntoTinta = { x, y, p: pr, t }
-    if (Number.isFinite(tx) && Number.isFinite(ty)) {
-      punto.tx = tx
-      punto.ty = ty
-    }
-    return punto
+    const [x, y, pr = 0.5, t = 0, tx = 0, ty = 0] = parts
+    return { x, y, pressure: pr, time: t, tiltX: tx, tiltY: ty }
   })
 }
 
-export function trazoFirestoreATinta(trazo: TrazoPizarra): TrazoTinta {
+export function strokeFirestoreAInk(trazo: TrazoPizarra): InkStroke {
   return {
     id: trazo.id,
+    points: ptsInkDesdeString(trazo.pts),
     color: trazo.color,
-    grosor: trazo.grosor,
-    herramienta: trazo.herramienta,
-    tipo: trazo.tipo,
+    baseWidth: trazo.grosor,
     pagina: trazo.pagina,
     orden: trazo.orden,
-    puntos: ptsInkDesdeString(trazo.pts),
+    herramienta: trazo.herramienta,
+    tipo: trazo.tipo,
   }
 }
 
-export function trazoTintaAFirestore(
-  trazo: Omit<TrazoTinta, "id" | "orden">
+export function strokeInkAFirestore(
+  stroke: Omit<InkStroke, "id" | "orden">
 ): Omit<TrazoPizarra, "id" | "orden"> {
   return {
-    pts: ptsInkAString(trazo.puntos),
-    color: trazo.color,
-    grosor: trazo.grosor,
-    herramienta: trazo.herramienta,
-    tipo: trazo.tipo,
-    pagina: trazo.pagina,
+    pts: ptsInkAString(stroke.points),
+    color: stroke.color,
+    grosor: stroke.baseWidth,
+    herramienta: stroke.herramienta,
+    tipo: stroke.tipo,
+    pagina: stroke.pagina,
   }
 }
 
@@ -147,10 +173,10 @@ function hexARgba(hex: string): [number, number, number, number] {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255, 1]
 }
 
-function puntosAPixeles(puntos: PuntoTinta[], w: number, h: number) {
-  return puntos.map((p) => {
+function puntosAPixeles(points: InkPoint[], w: number, h: number, dpr: number) {
+  return points.map((p) => {
     const { x, y } = desnormalizarPunto(p.x, p.y, w, h)
-    return { x, y, pressure: p.p }
+    return { x: x * dpr, y: y * dpr, pressure: p.pressure }
   })
 }
 
@@ -164,22 +190,30 @@ function trianguloAbanico(outline: number[][]): Float32Array {
   return new Float32Array(verts)
 }
 
-function mallaTrazoLibre(
-  puntos: PuntoTinta[],
-  color: string,
-  grosor: number,
+/** Grosor dinámico: baseWidth × pressure por punto. */
+export function mallaDesdeStroke(
+  stroke: Pick<InkStroke, "points" | "color" | "baseWidth" | "tipo" | "herramienta">,
   w: number,
   h: number,
-  borrador = false
+  dpr: number
 ): MallaTinta | null {
-  if (puntos.length === 0) return null
-  const pix = puntosAPixeles(puntos, w, h)
-  const base = grosor * (w / 1000) * 2.2
-  const simulate = pix.every((p) => Math.abs(p.pressure - 0.5) < 0.02)
+  const { points, color, baseWidth, tipo, herramienta } = stroke
+  if (points.length === 0) return null
+
+  const escala = (w / 1000) * dpr * 2.4
+  const pix = puntosAPixeles(points, w, h, dpr).map((p) => ({
+    ...p,
+    pressure: Math.min(1, Math.max(0.05, p.pressure)),
+  }))
+  const base = baseWidth * escala
+
+  if (tipo === "subrayado" && points.length >= 2) {
+    return mallaLibre([points[0], points[1]], color, baseWidth * 1.6, w, h, dpr)
+  }
 
   if (pix.length === 1) {
-    const r = Math.max(base * pix[0].pressure * 1.4, 2)
-    const segs = 16
+    const r = Math.max(base * pix[0].pressure * 0.9, 2 * dpr)
+    const segs = 20
     const verts: number[] = []
     for (let i = 0; i < segs; i++) {
       const a0 = (i / segs) * Math.PI * 2
@@ -188,19 +222,15 @@ function mallaTrazoLibre(
       verts.push(pix[0].x + Math.cos(a0) * r, pix[0].y + Math.sin(a0) * r)
       verts.push(pix[0].x + Math.cos(a1) * r, pix[0].y + Math.sin(a1) * r)
     }
-    return {
-      vertices: new Float32Array(verts),
-      color: borrador ? [0, 0, 0, 1] : hexARgba(color),
-      modo: borrador ? "erase" : "fill",
-    }
+    return { vertices: new Float32Array(verts), color: hexARgba(color) }
   }
 
   const outline = getStroke(pix, {
     size: base,
-    thinning: 0.62,
-    smoothing: 0.58,
-    streamline: 0.42,
-    simulatePressure: simulate,
+    thinning: 0.72,
+    smoothing: 0.62,
+    streamline: 0.38,
+    simulatePressure: false,
     easing: (t) => t,
     start: { taper: 0, cap: true },
     end: { taper: 0, cap: true },
@@ -208,147 +238,219 @@ function mallaTrazoLibre(
 
   const verts = trianguloAbanico(outline)
   if (verts.length === 0) return null
-  return {
-    vertices: verts,
-    color: borrador ? [0, 0, 0, 1] : hexARgba(color),
-    modo: borrador ? "erase" : "fill",
-  }
+  return { vertices: verts, color: hexARgba(color) }
 }
 
-function mallaLinea(
-  a: PuntoTinta,
-  b: PuntoTinta,
+function mallaLibre(
+  points: InkPoint[],
   color: string,
-  grosor: number,
+  baseWidth: number,
   w: number,
   h: number,
-  factor = 1
+  dpr: number
 ): MallaTinta | null {
-  return mallaTrazoLibre([a, b], color, grosor * factor, w, h)
+  return mallaDesdeStroke(
+    { points, color, baseWidth, tipo: "trazo", herramienta: "lapiz" },
+    w,
+    h,
+    dpr
+  )
 }
 
-function mallaElipse(
-  a: PuntoTinta,
-  b: PuntoTinta,
-  color: string,
-  grosor: number,
-  w: number,
-  h: number
-): MallaTinta | null {
-  const pa = desnormalizarPunto(a.x, a.y, w, h)
-  const pb = desnormalizarPunto(b.x, b.y, w, h)
-  const cx = (pa.x + pb.x) / 2
-  const cy = (pa.y + pb.y) / 2
-  const rx = Math.abs(pb.x - pa.x) / 2
-  const ry = Math.abs(pb.y - pa.y) / 2
-  if (rx < 2 || ry < 2) return null
-  const segs = 48
-  const pts: PuntoTinta[] = []
-  for (let i = 0; i <= segs; i++) {
-    const ang = (i / segs) * Math.PI * 2
-    const x = cx + Math.cos(ang) * rx
-    const y = cy + Math.sin(ang) * ry
-    const n = normalizarPuntoFino(x, y, w, h)
-    pts.push({ x: n.x, y: n.y, p: 0.5, t: i * 8 })
+function puntoCercaEraser(p: InkPoint, eraser: InkPoint[], radio: number): boolean {
+  for (const e of eraser) {
+    if (Math.hypot(p.x - e.x, p.y - e.y) < radio) return true
   }
-  return mallaTrazoLibre(pts, color, grosor, w, h)
+  return false
 }
 
-function mallaRectangulo(
-  a: PuntoTinta,
-  b: PuntoTinta,
-  color: string,
-  grosor: number,
-  w: number,
-  h: number
-): MallaTinta | null {
-  const pa = desnormalizarPunto(a.x, a.y, w, h)
-  const pb = desnormalizarPunto(b.x, b.y, w, h)
-  const x0 = Math.min(pa.x, pb.x)
-  const y0 = Math.min(pa.y, pb.y)
-  const x1 = Math.max(pa.x, pb.x)
-  const y1 = Math.max(pa.y, pb.y)
-  const corners = [
-    { x: x0, y: y0 },
-    { x: x1, y: y0 },
-    { x: x1, y: y1 },
-    { x: x0, y: y1 },
-    { x: x0, y: y0 },
-  ].map(({ x, y }) => {
-    const n = normalizarPuntoFino(x, y, w, h)
-    return { x: n.x, y: n.y, p: 0.5, t: 0 }
-  })
-  return mallaTrazoLibre(corners, color, grosor, w, h)
-}
+/** Borrador vectorial: divide trazos en segmentos A / B. */
+export function borrarSegmentosInk(
+  trazos: InkStroke[],
+  eraserPoints: InkPoint[],
+  eraserWidth: number
+): {
+  trazos: InkStroke[]
+  eliminados: string[]
+  agregados: InkStroke[]
+  acciones: AccionPizarra[]
+} {
+  if (eraserPoints.length === 0) {
+    return { trazos, eliminados: [], agregados: [], acciones: [] }
+  }
 
-export function mallaDesdeTrazo(
-  trazo: TrazoTinta,
-  w: number,
-  h: number
-): MallaTinta | null {
-  const { puntos, color, grosor, herramienta, tipo } = trazo
-  if (puntos.length === 0) return null
+  const radio = eraserWidth * 1.4
+  const resultado: InkStroke[] = []
+  const eliminados: string[] = []
+  const agregados: InkStroke[] = []
+  const acciones: AccionPizarra[] = []
 
-  if (herramienta === "borrador") {
-    return mallaTrazoLibre(puntos, color, grosor, w, h, true)
-  }
-  if (tipo === "punto") {
-    return mallaTrazoLibre(puntos, color, grosor, w, h)
-  }
-  if (tipo === "subrayado" && puntos.length >= 2) {
-    return mallaLinea(puntos[0], puntos[1], color, grosor, w, h, 1.8)
-  }
-  if (tipo === "circulo" && puntos.length >= 2) {
-    return mallaElipse(puntos[0], puntos[1], color, grosor, w, h)
-  }
-  if (tipo === "rectangulo" && puntos.length >= 2) {
-    return mallaRectangulo(puntos[0], puntos[1], color, grosor, w, h)
-  }
-  return mallaTrazoLibre(puntos, color, grosor, w, h)
-}
+  for (const trazo of trazos) {
+    if (trazo.herramienta === "borrador") continue
 
-/** Borrado vectorial parcial: quita trazos que intersectan el path del borrador. */
-export function aplicarBorradoVectorial(
-  trazos: TrazoTinta[],
-  trazoBorrador: PuntoTinta[],
-  grosorBorrador: number
-): TrazoTinta[] {
-  if (trazoBorrador.length === 0) return trazos
-  const radio = grosorBorrador * 1.2
-  return trazos.filter((trazo) => {
-    if (trazo.herramienta === "borrador") return false
-    for (const p of trazo.puntos) {
-      for (const e of trazoBorrador) {
-        if (Math.hypot(p.x - e.x, p.y - e.y) < radio) return false
+    const vivos: InkPoint[][] = []
+    let run: InkPoint[] = []
+
+    for (const p of trazo.points) {
+      if (puntoCercaEraser(p, eraserPoints, radio)) {
+        if (run.length > 0) {
+          vivos.push(run)
+          run = []
+        }
+      } else {
+        run.push(p)
       }
     }
-    return true
+    if (run.length > 0) vivos.push(run)
+
+    if (vivos.length === 0) {
+      eliminados.push(trazo.id)
+      acciones.push({ tipo: "removeStroke", stroke: trazo })
+      continue
+    }
+
+    if (vivos.length === 1 && vivos[0].length === trazo.points.length) {
+      resultado.push(trazo)
+      continue
+    }
+
+    eliminados.push(trazo.id)
+    const nuevos: InkStroke[] = vivos.map((pts, i) => ({
+      ...trazo,
+      id: `${trazo.id}-s${i}-${Date.now()}`,
+      points: pts,
+      tipo: pts.length === 1 ? "punto" : "trazo",
+    }))
+    agregados.push(...nuevos)
+    resultado.push(...nuevos)
+    acciones.push({ tipo: "splitStroke", original: trazo, strokes: nuevos })
+  }
+
+  return { trazos: resultado, eliminados, agregados, acciones }
+}
+
+export function resolverStrokeInk(
+  points: InkPoint[],
+  herramienta: HerramientaPizarra,
+  color: string,
+  baseWidth: number,
+  eraserWidth: number,
+  pagina: number
+): Omit<InkStroke, "id" | "orden"> | null {
+  const ptsPlano = points.map(({ x, y }) => ({ x, y }))
+  const res = resolverTrazoConGesto(ptsPlano, herramienta)
+  if (res.tipo !== "punto" && points.length < 2) return null
+
+  const esBorrador = herramienta === "borrador"
+  const puntosFinales = esBorrador ? points : ptsInkDesdeString(res.pts)
+
+  return {
+    points: puntosFinales,
+    color: esBorrador ? "#000000" : color,
+    baseWidth: esBorrador ? eraserWidth : baseWidth,
+    pagina,
+    herramienta: esBorrador ? "borrador" : "lapiz",
+    tipo: res.tipo,
+  }
+}
+
+export class PilaUndoRedo {
+  private undoStack: AccionPizarra[] = []
+  private redoStack: AccionPizarra[] = []
+
+  push(accion: AccionPizarra) {
+    this.undoStack.push(accion)
+    this.redoStack = []
+  }
+
+  puedeUndo() {
+    return this.undoStack.length > 0
+  }
+
+  puedeRedo() {
+    return this.redoStack.length > 0
+  }
+
+  undo(): AccionPizarra | null {
+    const a = this.undoStack.pop()
+    if (!a) return null
+    this.redoStack.push(a)
+    return a
+  }
+
+  redo(): AccionPizarra | null {
+    const a = this.redoStack.pop()
+    if (!a) return null
+    this.undoStack.push(a)
+    return a
+  }
+
+  limpiar() {
+    this.undoStack = []
+    this.redoStack = []
+  }
+}
+
+/** Compatibilidad con nombres anteriores */
+export type PuntoTinta = InkPoint
+export type TrazoTinta = InkStroke & { puntos: InkPoint[]; grosor: number }
+
+export function trazoFirestoreATinta(trazo: TrazoPizarra): TrazoTinta {
+  const s = strokeFirestoreAInk(trazo)
+  return { ...s, puntos: s.points, grosor: s.baseWidth }
+}
+
+export function trazoTintaAFirestore(trazo: Omit<TrazoTinta, "id" | "orden">) {
+  return strokeInkAFirestore({
+    points: trazo.puntos ?? trazo.points,
+    color: trazo.color,
+    baseWidth: trazo.grosor ?? trazo.baseWidth,
+    pagina: trazo.pagina,
+    herramienta: trazo.herramienta,
+    tipo: trazo.tipo,
   })
 }
 
-export function resolverTrazoTinta(
+export function mallaDesdeTrazo(trazo: TrazoTinta, w: number, h: number, dpr = 1): MallaTinta | null {
+  return mallaDesdeStroke(
+    {
+      points: trazo.puntos ?? trazo.points,
+      color: trazo.color,
+      baseWidth: trazo.grosor ?? trazo.baseWidth,
+      tipo: trazo.tipo,
+      herramienta: trazo.herramienta,
+    },
+    w,
+    h,
+    dpr
+  )
+}
+
+export const muestrearPuntero = (
+  e: PointerEvent,
+  rect: DOMRect,
+  t0: number
+): PuntoTinta => muestrearPunteroPen(e, rect, t0)
+
+export const agregarPuntoTinta = agregarPuntoInk
+export const predecirPuntosTinta = predecirPuntosInk
+export const aplicarBorradoVectorial = (
+  trazos: TrazoTinta[],
+  borrador: PuntoTinta[],
+  g: number
+) => borrarSegmentosInk(trazos, borrador, g).trazos
+
+export const resolverTrazoTinta = (
   puntos: PuntoTinta[],
   herramienta: HerramientaPizarra,
   color: string,
   grosor: number,
   grosorBorrador: number,
   pagina: number
-): Omit<TrazoTinta, "id" | "orden"> | null {
-  const ptsPlano = puntos.map(({ x, y }) => ({ x, y }))
-  const res = resolverTrazoConGesto(ptsPlano, herramienta)
-  if (res.tipo !== "punto" && puntos.length < 2) return null
+) => resolverStrokeInk(puntos, herramienta, color, grosor, grosorBorrador, pagina)
 
-  const puntosResueltos = ptsInkDesdeString(res.pts)
-  const esBorrador = herramienta === "borrador"
-
-  return {
-    puntos: esBorrador ? puntos : puntosResueltos,
-    color: esBorrador ? "#000000" : color,
-    grosor: esBorrador ? grosorBorrador : grosor,
-    herramienta: esBorrador ? "borrador" : "lapiz",
-    tipo: res.tipo,
-    pagina,
-  }
+export function esEntradaValidaPizarra(pointerType: string): boolean {
+  return esEntradaPen(pointerType)
 }
 
-export { BG as COLOR_FONDO_PIZARRA }
+export { COLOR_FONDO_PIZARRA as BG }
