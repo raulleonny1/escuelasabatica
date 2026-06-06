@@ -105,7 +105,11 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
   }, [])
 
   const actualizarCapaStroke = useCallback(
-    (id: string, stroke: Parameters<typeof mallaDesdeStroke>[0] | null) => {
+    (
+      id: string,
+      stroke: Parameters<typeof mallaDesdeStroke>[0] | null,
+      opts?: { enVivo?: boolean }
+    ) => {
       const motor = motorRef.current
       if (!motor) return
       const { w, h, dpr } = dims.current
@@ -114,9 +118,9 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
         mallasCache.current.delete(id)
         return
       }
-      const sig = JSON.stringify(stroke.points.slice(-3)) + stroke.baseWidth
-      if (mallasCache.current.get(id) === sig && id !== ID_ACTIVO && id !== ID_PREDICCION) return
-      const malla = mallaDesdeStroke(stroke, w, h, dpr)
+      const sig = JSON.stringify(stroke.points.slice(-3)) + stroke.baseWidth + (opts?.enVivo ? "v" : "")
+      if (mallasCache.current.get(id) === sig && id !== ID_ACTIVO) return
+      const malla = mallaDesdeStroke(stroke, w, h, dpr, opts)
       motor.actualizarCapa(id, malla)
       mallasCache.current.set(id, sig)
     },
@@ -127,51 +131,38 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     const motor = motorRef.current
     if (!motor || dims.current.w <= 0) return
 
-    const { w, h, dpr } = dims.current
     const ids = trazosRef.current.map((t) => t.id)
 
     for (const trazo of trazosRef.current) {
       actualizarCapaStroke(trazo.id, trazo)
     }
 
-    let overlays: string[] = []
+    const overlays: string[] = []
     if (trazoActivo.current.length > 0) {
+      const ptsDibujo =
+        herramienta !== "borrador" && trazoActivo.current.length >= 2
+          ? [...trazoActivo.current, ...predecirPuntosInk(trazoActivo.current)]
+          : trazoActivo.current
+
       const preview = resolverStrokeInk(
-        trazoActivo.current,
+        ptsDibujo,
         herramienta,
         color,
         grosor,
         grosorBorrador,
-        paginaActual
+        paginaActual,
+        { enVivo: true }
       )
       if (preview) {
-        actualizarCapaStroke(ID_ACTIVO, preview)
+        actualizarCapaStroke(ID_ACTIVO, preview, { enVivo: true })
         overlays.push(ID_ACTIVO)
-
-        if (herramienta !== "borrador") {
-          const pred = predecirPuntosInk(trazoActivo.current)
-          if (pred.length > 0) {
-            const predStroke = {
-              ...preview,
-              points: [...trazoActivo.current, ...pred],
-            }
-            const m = mallaDesdeStroke(predStroke, w, h, dpr)
-            if (m) {
-              m.color = [m.color[0], m.color[1], m.color[2], 0.4]
-              motor.actualizarCapa(ID_PREDICCION, m)
-              overlays.push(ID_PREDICCION)
-            }
-          } else {
-            motor.eliminarCapa(ID_PREDICCION)
-          }
-        }
       }
     } else {
       motor.eliminarCapa(ID_ACTIVO)
-      motor.eliminarCapa(ID_PREDICCION)
     }
 
-    motor.podarCapas(new Set([...ids, ID_ACTIVO, ID_PREDICCION]))
+    motor.eliminarCapa(ID_PREDICCION)
+    motor.podarCapas(new Set([...ids, ID_ACTIVO]))
     motor.render(ids, overlays)
   }, [
     actualizarCapaStroke,
@@ -364,7 +355,7 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     let cambio = false
     for (const ev of eventos) {
       const p = muestrearPunteroPen(ev, rect, t0Trazo.current)
-      const next = agregarPuntoInk(trazoActivo.current, p, 0.3)
+      const next = agregarPuntoInk(trazoActivo.current, p, 1.0)
       if (next.length !== trazoActivo.current.length) {
         trazoActivo.current = next
         cambio = true
@@ -423,7 +414,6 @@ const PizarraInkCanvas = forwardRef<PizarraInkCanvasRef, Props>(function Pizarra
     }
 
     motorRef.current?.eliminarCapa(ID_ACTIVO)
-    motorRef.current?.eliminarCapa(ID_PREDICCION)
     programarRender()
   }
 

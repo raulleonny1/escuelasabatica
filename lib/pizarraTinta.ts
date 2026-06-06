@@ -1,4 +1,5 @@
 import getStroke from "perfect-freehand"
+import earcut from "earcut"
 import type { HerramientaPizarra, TipoTrazo, TrazoPizarra } from "./pizarraClase"
 import {
   desnormalizarPunto,
@@ -74,7 +75,7 @@ export function muestrearPunteroPen(
 export function agregarPuntoInk(
   pts: InkPoint[],
   p: InkPoint,
-  minDist = 0.35
+  minDist = 1.1
 ): InkPoint[] {
   if (pts.length === 0) return [p]
   const last = pts[pts.length - 1]
@@ -180,14 +181,21 @@ function puntosAPixeles(points: InkPoint[], w: number, h: number, dpr: number) {
   })
 }
 
-function trianguloAbanico(outline: number[][]): Float32Array {
+function trianguloContorno(outline: number[][]): Float32Array {
   if (outline.length < 3) return new Float32Array(0)
+  const flat: number[] = []
+  for (const [x, y] of outline) flat.push(x, y)
+  const indices = earcut(flat)
   const verts: number[] = []
-  const [x0, y0] = outline[0]
-  for (let i = 1; i < outline.length - 1; i++) {
-    verts.push(x0, y0, outline[i][0], outline[i][1], outline[i + 1][0], outline[i + 1][1])
+  for (const i of indices) {
+    verts.push(flat[i * 2], flat[i * 2 + 1])
   }
   return new Float32Array(verts)
+}
+
+/** Grosor en píxeles de dispositivo: baseWidth referenciado a ~1000px de ancho. */
+function grosorEnPixeles(baseWidth: number, w: number, dpr: number): number {
+  return Math.max(baseWidth * (w / 1000) * dpr * 0.85, 1.2 * dpr)
 }
 
 /** Grosor dinámico: baseWidth × pressure por punto. */
@@ -195,25 +203,26 @@ export function mallaDesdeStroke(
   stroke: Pick<InkStroke, "points" | "color" | "baseWidth" | "tipo" | "herramienta">,
   w: number,
   h: number,
-  dpr: number
+  dpr: number,
+  opts?: { enVivo?: boolean }
 ): MallaTinta | null {
   const { points, color, baseWidth, tipo, herramienta } = stroke
   if (points.length === 0) return null
 
-  const escala = (w / 1000) * dpr * 2.4
   const pix = puntosAPixeles(points, w, h, dpr).map((p) => ({
     ...p,
-    pressure: Math.min(1, Math.max(0.05, p.pressure)),
+    pressure: Math.min(1, Math.max(0.12, p.pressure)),
   }))
-  const base = baseWidth * escala
+  const base = grosorEnPixeles(baseWidth, w, dpr)
+  const tipoDibujo = opts?.enVivo && herramienta === "lapiz" ? "trazo" : tipo
 
-  if (tipo === "subrayado" && points.length >= 2) {
-    return mallaLibre([points[0], points[1]], color, baseWidth * 1.6, w, h, dpr)
+  if (tipoDibujo === "subrayado" && points.length >= 2) {
+    return mallaLibre([points[0], points[1]], color, baseWidth * 1.4, w, h, dpr)
   }
 
   if (pix.length === 1) {
-    const r = Math.max(base * pix[0].pressure * 0.9, 2 * dpr)
-    const segs = 20
+    const r = Math.max(base * pix[0].pressure * 0.55, 1.2 * dpr)
+    const segs = 12
     const verts: number[] = []
     for (let i = 0; i < segs; i++) {
       const a0 = (i / segs) * Math.PI * 2
@@ -227,16 +236,16 @@ export function mallaDesdeStroke(
 
   const outline = getStroke(pix, {
     size: base,
-    thinning: 0.72,
-    smoothing: 0.62,
-    streamline: 0.38,
+    thinning: 0.48,
+    smoothing: 0.55,
+    streamline: 0.52,
     simulatePressure: false,
     easing: (t) => t,
-    start: { taper: 0, cap: true },
-    end: { taper: 0, cap: true },
+    start: { taper: 2, cap: true },
+    end: { taper: 2, cap: true },
   })
 
-  const verts = trianguloAbanico(outline)
+  const verts = trianguloContorno(outline)
   if (verts.length === 0) return null
   return { vertices: verts, color: hexARgba(color) }
 }
@@ -335,13 +344,29 @@ export function resolverStrokeInk(
   color: string,
   baseWidth: number,
   eraserWidth: number,
-  pagina: number
+  pagina: number,
+  opts?: { enVivo?: boolean }
 ): Omit<InkStroke, "id" | "orden"> | null {
+  if (points.length < 1) return null
+
+  const esBorrador = herramienta === "borrador"
+
+  if (opts?.enVivo && (herramienta === "lapiz" || esBorrador)) {
+    if (!esBorrador && points.length < 2) return null
+    return {
+      points,
+      color: esBorrador ? "#000000" : color,
+      baseWidth: esBorrador ? eraserWidth : baseWidth,
+      pagina,
+      herramienta: esBorrador ? "borrador" : "lapiz",
+      tipo: "trazo",
+    }
+  }
+
   const ptsPlano = points.map(({ x, y }) => ({ x, y }))
   const res = resolverTrazoConGesto(ptsPlano, herramienta)
   if (res.tipo !== "punto" && points.length < 2) return null
 
-  const esBorrador = herramienta === "borrador"
   const puntosFinales = esBorrador ? points : ptsInkDesdeString(res.pts)
 
   return {

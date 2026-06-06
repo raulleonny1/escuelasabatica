@@ -17,7 +17,7 @@ const PizarraInkCanvas = dynamic(() => import("@/components/PizarraInkCanvas"), 
 })
 
 const COLORES = ["#1e293b", "#dc2626", "#2563eb", "#16a34a"] as const
-const GROSORES = [2, 4, 7] as const
+const GROSORES = [2, 3, 5] as const
 const GROSORES_BORRADOR = [8, 16, 28, 44] as const
 const ETIQUETAS_BORRADOR = ["S", "M", "L", "XL"] as const
 
@@ -33,7 +33,7 @@ export default function PizarraOverlay({ claseId }: { claseId: string }) {
   const [puedeRedo, setPuedeRedo] = useState(false)
 
   const [color, setColor] = useState<string>(COLORES[0])
-  const [grosor, setGrosor] = useState<number>(() => (esDispositivoTactil() ? GROSORES[2] : GROSORES[1]))
+  const [grosor, setGrosor] = useState<number>(() => (esDispositivoTactil() ? GROSORES[1] : GROSORES[1]))
   const [grosorBorrador, setGrosorBorrador] = useState<number>(GROSORES_BORRADOR[1])
   const [herramienta, setHerramienta] = useState<HerramientaPizarra>("lapiz")
 
