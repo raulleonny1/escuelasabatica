@@ -26,6 +26,8 @@ export default function LeccionBarraEdicion({ herramienta, onHerramienta }: Prop
             herramienta === t.id ? " leccion-herramienta-btn-activa" : ""
           }${t.id === "negrilla" ? " leccion-herramienta-negrilla" : ""}${
             t.id === "subrayar" ? " leccion-herramienta-subrayar" : ""
+          }${
+            t.id === "borrador" ? " leccion-herramienta-borrador-tinta" : ""
           }${t.id === "borrar" ? " leccion-herramienta-borrar" : ""}${
             t.id === "cursor" ? " leccion-herramienta-cursor" : ""
           }`}
@@ -44,6 +46,8 @@ export default function LeccionBarraEdicion({ herramienta, onHerramienta }: Prop
             <span className="leccion-herramienta-icono" aria-hidden>
               ✎
             </span>
+          ) : t.id === "borrador" ? (
+            <span className="leccion-herramienta-goma" aria-hidden />
           ) : t.id === "borrar" ? (
             <span className="leccion-herramienta-icono" aria-hidden>
               ⌫

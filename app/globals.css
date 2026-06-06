@@ -648,6 +648,30 @@ html[data-lectura="1"] .pdf-zoom-bar {
   color: #78350f;
 }
 
+.leccion-borrador-aviso {
+  background: rgba(244, 114, 182, 0.14);
+  color: #831843;
+}
+
+.leccion-herramienta-goma {
+  display: block;
+  width: 1.1rem;
+  height: 0.75rem;
+  border-radius: 0.15rem 0.35rem 0.15rem 0.15rem;
+  background: linear-gradient(135deg, #fbcfe8, #f472b6);
+  border: 1px solid rgba(157, 23, 77, 0.25);
+  transform: rotate(-18deg);
+}
+
+.leccion-herramienta-borrador-tinta.leccion-herramienta-btn-activa {
+  border-color: #db2777;
+  box-shadow: 0 0 0 2px rgba(219, 39, 119, 0.22);
+}
+
+.leccion-ink-capa-borrador {
+  cursor: crosshair;
+}
+
 .leccion-anotable mark {
   padding: 0.05em 0.1em;
   border-radius: 0.15em;

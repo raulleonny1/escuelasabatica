@@ -5,6 +5,7 @@ import { formatearParrafosDia, type BloqueLeccion } from "@/lib/leccionFormato"
 import {
   aplicarHerramientaEnRango,
   esHerramientaResalte,
+  esHerramientaTinta,
   guardarHtmlAnotado,
   leerHtmlAnotado,
   restaurarRango,
@@ -289,9 +290,14 @@ export default function LeccionContenidoFormateado({
   const claseAnotable =
     esHerramientaResalte(herramienta)
       ? " leccion-anotable-marcando"
-      : herramienta === "subrayar"
+      : esHerramientaTinta(herramienta)
         ? " leccion-anotable-lapiz"
         : ""
+
+  const modoTinta =
+    herramienta === "subrayar" || herramienta === "borrador"
+      ? herramienta
+      : null
 
   return (
     <>
@@ -301,6 +307,11 @@ export default function LeccionContenidoFormateado({
         {herramienta === "subrayar" && (
           <p className="leccion-lapiz-aviso" role="status">
             Dibuja sobre el texto con lápiz o dedo. Toca ↖ Leer para desplazarte.
+          </p>
+        )}
+        {herramienta === "borrador" && (
+          <p className="leccion-lapiz-aviso leccion-borrador-aviso" role="status">
+            Pasa el borrador sobre las rayas para quitarlas. Toca ↖ Leer para desplazarte.
           </p>
         )}
 
@@ -330,7 +341,7 @@ export default function LeccionContenidoFormateado({
           <LeccionInkCapa
             semana={semana}
             fecha={fecha}
-            activo={herramienta === "subrayar"}
+            modo={modoTinta}
             anclaRef={anclaInkRef}
           />
         </div>

@@ -8,6 +8,7 @@ export type HerramientaLeccion =
   | "rosa"
   | "negrilla"
   | "subrayar"
+  | "borrador"
   | "borrar"
 
 export const HERRAMIENTAS_RESALTE: {
@@ -22,7 +23,8 @@ export const HERRAMIENTAS_RESALTE: {
   { id: "rosa", titulo: "Rosa", color: "#fbcfe8" },
   { id: "negrilla", titulo: "Negrilla" },
   { id: "subrayar", titulo: "Lápiz" },
-  { id: "borrar", titulo: "Quitar" },
+  { id: "borrador", titulo: "Borrador" },
+  { id: "borrar", titulo: "Quitar color" },
 ]
 
 function clave(semana: number, fecha: string) {
@@ -42,7 +44,11 @@ export function guardarHtmlAnotado(semana: number, fecha: string, html: string) 
 }
 
 export function esHerramientaResalte(h: HerramientaLeccion): boolean {
-  return h !== "cursor" && h !== "subrayar"
+  return h !== "cursor" && h !== "subrayar" && h !== "borrador"
+}
+
+export function esHerramientaTinta(h: HerramientaLeccion): boolean {
+  return h === "subrayar" || h === "borrador"
 }
 
 /** Envuelve un rango en un elemento (resiste rangos parciales). */
@@ -83,7 +89,7 @@ export function aplicarHerramientaEnRango(
   range: Range,
   contenedor: Element
 ): boolean {
-  if (herramienta === "cursor" || herramienta === "subrayar") return false
+  if (herramienta === "cursor" || herramienta === "subrayar" || herramienta === "borrador") return false
   if (herramienta === "borrar") return quitarResalteEnRango(range, contenedor)
   if (herramienta === "negrilla") {
     return envolverRango("strong", "leccion-resalte-negrilla", range)
