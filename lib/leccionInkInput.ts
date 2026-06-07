@@ -71,12 +71,10 @@ export function esEntradaDibujo(e: PointerEvent): boolean {
 }
 
 export function crearContextoTinta(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
-  const tactil =
-    typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   return (
     canvas.getContext("2d", {
       alpha: true,
-      desynchronized: !tactil,
+      desynchronized: false,
       willReadFrequently: false,
     }) ?? canvas.getContext("2d")
   )

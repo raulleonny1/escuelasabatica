@@ -5,6 +5,7 @@ import { getFechaDestacadaEnSemana, getFechasSemana } from "@/lib/semana"
 import LeccionContenidoFormateado from "@/components/LeccionContenidoFormateado"
 import LeccionBarraEdicion from "@/components/LeccionBarraEdicion"
 import LeccionInkCapa from "@/components/LeccionInkCapa"
+import LeccionInkSvgOverlay from "@/components/LeccionInkSvgOverlay"
 import { esHerramientaTinta, type HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
   diaTieneContenido,
@@ -39,6 +40,7 @@ export default function LeccionTextoViewer({
   const [descargando, setDescargando] = useState(false)
   const [herramienta, setHerramienta] = useState<HerramientaLeccion>("cursor")
   const [tieneTinta, setTieneTinta] = useState(false)
+  const [revisionTinta, setRevisionTinta] = useState(0)
   const contenidoRef = useRef<HTMLDivElement>(null)
   const lienzoRef = useRef<HTMLDivElement>(null)
 
@@ -129,7 +131,8 @@ export default function LeccionTextoViewer({
         ? diaActivo.contenido.split(/\n{2,}/).filter(Boolean)
         : []
 
-  const mostrarCapaTinta = modoTinta !== null || tieneTinta
+  const mostrarSvgTinta = tieneTinta && modoTinta === null
+  const mostrarCanvasTinta = modoTinta !== null
 
   if (cargando) {
     return (
@@ -235,15 +238,36 @@ export default function LeccionTextoViewer({
               preguntas={diaActivo.preguntas}
               herramienta={herramienta}
             />
-            {mostrarCapaTinta && (
-              <LeccionInkCapa
+            {mostrarSvgTinta && (
+              <LeccionInkSvgOverlay
                 semana={semana}
                 fecha={fechaActiva}
-                modo={modoTinta}
                 anclaRef={lienzoRef}
-                scrollRef={contenidoRef}
-                onTrazosChange={(n) => setTieneTinta(n > 0)}
+                revision={revisionTinta}
               />
+            )}
+            {mostrarCanvasTinta && modoTinta && (
+              <>
+                {tieneTinta && (
+                  <LeccionInkSvgOverlay
+                    semana={semana}
+                    fecha={fechaActiva}
+                    anclaRef={lienzoRef}
+                    revision={revisionTinta}
+                  />
+                )}
+                <LeccionInkCapa
+                  semana={semana}
+                  fecha={fechaActiva}
+                  modo={modoTinta}
+                  anclaRef={lienzoRef}
+                  scrollRef={contenidoRef}
+                  onTrazosChange={(n) => {
+                    setTieneTinta(n > 0)
+                    setRevisionTinta((r) => r + 1)
+                  }}
+                />
+              </>
             )}
           </div>
         ) : (

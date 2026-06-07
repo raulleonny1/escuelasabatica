@@ -17,25 +17,24 @@ import {
   GROSOR_LAPIZ,
   pintarIncrementoRapido,
   pintarSegmentoRapido,
-  repintarTrazos,
   trazoDesdePuntos,
 } from "@/lib/leccionInkPintura"
 import {
   borrarTrazosEnPunto,
   guardarTrazosLeccion,
   leerTrazosLeccion,
-  type TrazoLeccionLocal,
 } from "@/lib/leccionTintaLocal"
 
 type Props = {
   semana: number
   fecha: string
-  modo: Extract<HerramientaLeccion, "subrayar" | "borrador"> | null
+  modo: Extract<HerramientaLeccion, "subrayar" | "borrador">
   anclaRef: RefObject<HTMLElement | null>
   scrollRef?: RefObject<HTMLElement | null>
   onTrazosChange?: (cantidad: number) => void
 }
 
+/** Solo canvas en vivo — las rayas guardadas las muestra LeccionInkSvgOverlay. */
 export default function LeccionInkCapa({
   semana,
   fecha,
@@ -44,10 +43,10 @@ export default function LeccionInkCapa({
   scrollRef,
   onTrazosChange,
 }: Props) {
-  const baseRef = useRef<HTMLCanvasElement>(null)
+  const capasRef = useRef<HTMLDivElement>(null)
   const liveRef = useRef<HTMLCanvasElement>(null)
   const ctxLiveRef = useRef<CanvasRenderingContext2D | null>(null)
-  const trazosRef = useRef<TrazoLeccionLocal[]>([])
+  const trazosRef = useRef(leerTrazosLeccion(semana, fecha))
   const trazoActivo = useRef<PuntoInk[]>([])
   const ultimoPunto = useRef<PuntoInk | null>(null)
   const pintando = useRef(false)
@@ -58,13 +57,10 @@ export default function LeccionInkCapa({
   const scrollPrevio = useRef<string | null>(null)
   modoRef.current = modo
 
-  const puedeDibujar = modo !== null
-
   const sincronizarCanvas = useCallback(() => {
     const ancla = anclaRef.current
-    const base = baseRef.current
     const live = liveRef.current
-    if (!ancla || !base || !live) return false
+    if (!ancla || !live) return false
 
     const w = Math.max(ancla.scrollWidth, ancla.clientWidth)
     const h = Math.max(ancla.scrollHeight, ancla.clientHeight)
@@ -77,29 +73,29 @@ export default function LeccionInkCapa({
       renderScale: medidas.renderScale,
     }
 
-    for (const canvas of [base, live]) {
-      canvas.width = medidas.pixelW
-      canvas.height = medidas.pixelH
-      canvas.style.width = `${medidas.w}px`
-      canvas.style.height = `${medidas.h}px`
-    }
+    live.width = medidas.pixelW
+    live.height = medidas.pixelH
+    live.style.width = `${medidas.w}px`
+    live.style.height = `${medidas.h}px`
 
     ctxLiveRef.current = null
-    const ctx = crearContextoTinta(base)
-    if (ctx) repintarTrazos(ctx, trazosRef.current, medidas.renderScale, medidas.w, medidas.h)
+    const ctx = crearContextoTinta(live)
+    if (ctx) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, medidas.pixelW, medidas.pixelH)
+    }
     return true
   }, [anclaRef])
 
   useEffect(() => {
     trazosRef.current = leerTrazosLeccion(semana, fecha)
-    sincronizarCanvas()
-  }, [semana, fecha, sincronizarCanvas])
+  }, [semana, fecha])
 
   useEffect(() => {
     const ancla = anclaRef.current
     if (!ancla) return
     const obs = new ResizeObserver(() => {
-      if (!pintando.current) sincronizarCanvas()
+      if (pintando.current) sincronizarCanvas()
     })
     obs.observe(ancla)
     return () => obs.disconnect()
@@ -126,6 +122,14 @@ export default function LeccionInkCapa({
     const ctx = ctxVivo()
     if (!live || !ctx) return
     const { w, h } = dims.current
+    ctx.setTransform(
+      dims.current.renderScale,
+      0,
+      0,
+      dims.current.renderScale,
+      0,
+      0
+    )
     ctx.clearRect(0, 0, w, h)
   }, [ctxVivo])
 
@@ -154,13 +158,10 @@ export default function LeccionInkCapa({
       if (!huboCambio) return
       trazosRef.current = trazos
       persistir()
-      const ctx = baseRef.current ? crearContextoTinta(baseRef.current) : null
-      if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.renderScale, dims.current.w, dims.current.h)
     },
     [persistir]
   )
 
-  /** Dibuja cada muestra coalescida al instante (sin recalcular todo el trazo). */
   const procesarMuestras = useCallback(
     (e: PointerEvent, rect: DOMRect, guardar: boolean) => {
       const ctx = ctxVivo()
@@ -197,8 +198,9 @@ export default function LeccionInkCapa({
   }, [bloquearScroll])
 
   useEffect(() => {
+    const capas = capasRef.current
     const live = liveRef.current
-    if (!live || !puedeDibujar) return
+    if (!capas || !live) return
 
     const limpiarSeleccion = () => {
       window.getSelection()?.removeAllRanges()
@@ -225,8 +227,6 @@ export default function LeccionInkCapa({
         if (pts.length >= 1) {
           trazosRef.current = [...trazosRef.current, trazoDesdePuntos(pts)]
           persistir()
-          const ctx = baseRef.current ? crearContextoTinta(baseRef.current) : null
-          if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.renderScale, dims.current.w, dims.current.h)
         }
       } else {
         trazoActivo.current = []
@@ -234,9 +234,10 @@ export default function LeccionInkCapa({
 
       limpiarCapaViva()
       ctxLiveRef.current = null
+      live.classList.remove("leccion-ink-live-trazo")
 
       try {
-        live.releasePointerCapture(e.pointerId)
+        capas.releasePointerCapture(e.pointerId)
       } catch {
         /* ya liberado */
       }
@@ -254,7 +255,9 @@ export default function LeccionInkCapa({
 
       e.preventDefault()
       limpiarSeleccion()
-      live.setPointerCapture(e.pointerId)
+      sincronizarCanvas()
+      live.classList.add("leccion-ink-live-trazo")
+      capas.setPointerCapture(e.pointerId)
       pointerId.current = e.pointerId
       pintando.current = true
       trazoActivo.current = []
@@ -299,39 +302,39 @@ export default function LeccionInkCapa({
       }
     }
 
-    live.addEventListener("pointerdown", onPointerDown, { passive: false })
-    live.addEventListener("pointermove", onPointerMove, { passive: false })
-    live.addEventListener("pointerup", onPointerUp, { passive: false })
-    live.addEventListener("pointercancel", onPointerUp, { passive: false })
-    live.addEventListener("lostpointercapture", onLostCapture)
+    capas.addEventListener("pointerdown", onPointerDown, { passive: false })
+    capas.addEventListener("pointermove", onPointerMove, { passive: false })
+    capas.addEventListener("pointerup", onPointerUp, { passive: false })
+    capas.addEventListener("pointercancel", onPointerUp, { passive: false })
+    capas.addEventListener("lostpointercapture", onLostCapture)
 
     return () => {
       bloquearScroll(false)
-      live.removeEventListener("pointerdown", onPointerDown)
-      live.removeEventListener("pointermove", onPointerMove)
-      live.removeEventListener("pointerup", onPointerUp)
-      live.removeEventListener("pointercancel", onPointerUp)
-      live.removeEventListener("lostpointercapture", onLostCapture)
+      capas.removeEventListener("pointerdown", onPointerDown)
+      capas.removeEventListener("pointermove", onPointerMove)
+      capas.removeEventListener("pointerup", onPointerUp)
+      capas.removeEventListener("pointercancel", onPointerUp)
+      capas.removeEventListener("lostpointercapture", onLostCapture)
     }
   }, [
-    puedeDibujar,
     aplicarBorrador,
     persistir,
     rectAncla,
     bloquearScroll,
     limpiarCapaViva,
     procesarMuestras,
+    sincronizarCanvas,
   ])
 
   return (
     <div
-      className={`leccion-ink-capas${puedeDibujar ? " leccion-ink-capa-activa" : ""}${
+      ref={capasRef}
+      className={`leccion-ink-capas leccion-ink-capa-activa${
         modo === "borrador" ? " leccion-ink-capa-borrador" : ""
       }`}
       aria-hidden
     >
-      <canvas ref={baseRef} className="leccion-ink-base" />
-      <canvas ref={liveRef} className="leccion-ink-live" />
+      <canvas ref={liveRef} className="leccion-ink-live leccion-ink-live-oculto" />
     </div>
   )
 }

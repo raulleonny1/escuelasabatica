@@ -734,9 +734,22 @@ html[data-lectura="1"] .pdf-zoom-bar {
   z-index: 4;
   pointer-events: none;
   -webkit-touch-callout: none;
+  background: transparent;
 }
 
-.leccion-ink-base,
+.leccion-ink-svg {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.leccion-ink-svg svg {
+  display: block;
+  pointer-events: none;
+}
+
 .leccion-ink-live {
   position: absolute;
   inset: 0;
@@ -745,12 +758,15 @@ html[data-lectura="1"] .pdf-zoom-bar {
   display: block;
   touch-action: none;
   background: transparent;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
-.leccion-ink-live {
-  pointer-events: none;
-  touch-action: none;
+/* Sin trazo activo: no ocupa espacio visual (evita fondo negro en PC) */
+.leccion-ink-live-oculto:not(.leccion-ink-live-trazo) {
+  width: 0;
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
 }
 
 .leccion-ink-capa-activa {
@@ -758,7 +774,6 @@ html[data-lectura="1"] .pdf-zoom-bar {
 }
 
 .leccion-ink-capa-activa .leccion-ink-live {
-  pointer-events: auto;
   touch-action: none;
   cursor: crosshair;
 }
