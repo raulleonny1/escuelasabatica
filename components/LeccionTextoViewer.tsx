@@ -16,6 +16,7 @@ import {
   semanaDisponibleOffline,
 } from "@/lib/leccionOffline"
 import { hayConexion } from "@/lib/syncCola"
+import { leerTrazosLeccion } from "@/lib/leccionTintaLocal"
 
 type Props = {
   semana: number
@@ -37,6 +38,7 @@ export default function LeccionTextoViewer({
   const [offlineLista, setOfflineLista] = useState<boolean | null>(null)
   const [descargando, setDescargando] = useState(false)
   const [herramienta, setHerramienta] = useState<HerramientaLeccion>("cursor")
+  const [tieneTinta, setTieneTinta] = useState(false)
   const contenidoRef = useRef<HTMLDivElement>(null)
   const lienzoRef = useRef<HTMLDivElement>(null)
 
@@ -84,6 +86,10 @@ export default function LeccionTextoViewer({
   }, [semana])
 
   useEffect(() => {
+    setTieneTinta(leerTrazosLeccion(semana, fechaActiva).length > 0)
+  }, [semana, fechaActiva])
+
+  useEffect(() => {
     if (!esHerramientaTinta(herramienta)) return
     window.getSelection()?.removeAllRanges()
   }, [herramienta])
@@ -122,6 +128,8 @@ export default function LeccionTextoViewer({
       : diaActivo?.contenido
         ? diaActivo.contenido.split(/\n{2,}/).filter(Boolean)
         : []
+
+  const mostrarCapaTinta = modoTinta !== null || tieneTinta
 
   if (cargando) {
     return (
@@ -227,13 +235,16 @@ export default function LeccionTextoViewer({
               preguntas={diaActivo.preguntas}
               herramienta={herramienta}
             />
-            <LeccionInkCapa
-              semana={semana}
-              fecha={fechaActiva}
-              modo={modoTinta}
-              anclaRef={lienzoRef}
-              scrollRef={contenidoRef}
-            />
+            {mostrarCapaTinta && (
+              <LeccionInkCapa
+                semana={semana}
+                fecha={fechaActiva}
+                modo={modoTinta}
+                anclaRef={lienzoRef}
+                scrollRef={contenidoRef}
+                onTrazosChange={(n) => setTieneTinta(n > 0)}
+              />
+            )}
           </div>
         ) : (
           <p className="p-6 text-center text-sm text-muted">

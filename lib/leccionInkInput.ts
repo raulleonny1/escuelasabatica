@@ -71,11 +71,36 @@ export function esEntradaDibujo(e: PointerEvent): boolean {
 }
 
 export function crearContextoTinta(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
+  const tactil =
+    typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   return (
     canvas.getContext("2d", {
       alpha: true,
-      desynchronized: true,
+      desynchronized: !tactil,
       willReadFrequently: false,
     }) ?? canvas.getContext("2d")
   )
+}
+
+/** Evita canvas gigantes que en móvil Safari se ven negros. */
+export function calcularDimensionesCanvas(
+  w: number,
+  h: number,
+  dprIn = typeof window !== "undefined" ? Math.min(window.devicePixelRatio || 1, 3) : 1
+) {
+  const MAX_PX = 4096
+  let pixelW = w * dprIn
+  let pixelH = h * dprIn
+  let scale = 1
+  if (pixelW > MAX_PX || pixelH > MAX_PX) {
+    scale = Math.min(MAX_PX / pixelW, MAX_PX / pixelH, 1)
+  }
+  return {
+    w,
+    h,
+    dpr: dprIn,
+    pixelW: Math.max(1, Math.floor(pixelW * scale)),
+    pixelH: Math.max(1, Math.floor(pixelH * scale)),
+    renderScale: dprIn * scale,
+  }
 }

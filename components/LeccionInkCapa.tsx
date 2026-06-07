@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, type RefObject } from "react"
 import type { HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
   agregarPuntosInk,
+  calcularDimensionesCanvas,
   crearContextoTinta,
   esEntradaDibujo,
   esPencilPointer,
@@ -32,6 +33,7 @@ type Props = {
   modo: Extract<HerramientaLeccion, "subrayar" | "borrador"> | null
   anclaRef: RefObject<HTMLElement | null>
   scrollRef?: RefObject<HTMLElement | null>
+  onTrazosChange?: (cantidad: number) => void
 }
 
 export default function LeccionInkCapa({
@@ -40,6 +42,7 @@ export default function LeccionInkCapa({
   modo,
   anclaRef,
   scrollRef,
+  onTrazosChange,
 }: Props) {
   const baseRef = useRef<HTMLCanvasElement>(null)
   const liveRef = useRef<HTMLCanvasElement>(null)
@@ -50,7 +53,7 @@ export default function LeccionInkCapa({
   const pintando = useRef(false)
   const penPrioritario = useRef(false)
   const pointerId = useRef<number | null>(null)
-  const dims = useRef({ w: 0, h: 0, dpr: 1 })
+  const dims = useRef({ w: 0, h: 0, renderScale: 1 })
   const modoRef = useRef(modo)
   const scrollPrevio = useRef<string | null>(null)
   modoRef.current = modo
@@ -67,19 +70,23 @@ export default function LeccionInkCapa({
     const h = Math.max(ancla.scrollHeight, ancla.clientHeight)
     if (w <= 0 || h <= 0) return false
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 3)
-    dims.current = { w, h, dpr }
+    const medidas = calcularDimensionesCanvas(w, h)
+    dims.current = {
+      w: medidas.w,
+      h: medidas.h,
+      renderScale: medidas.renderScale,
+    }
 
     for (const canvas of [base, live]) {
-      canvas.width = Math.floor(w * dpr)
-      canvas.height = Math.floor(h * dpr)
-      canvas.style.width = `${w}px`
-      canvas.style.height = `${h}px`
+      canvas.width = medidas.pixelW
+      canvas.height = medidas.pixelH
+      canvas.style.width = `${medidas.w}px`
+      canvas.style.height = `${medidas.h}px`
     }
 
     ctxLiveRef.current = null
     const ctx = crearContextoTinta(base)
-    if (ctx) repintarTrazos(ctx, trazosRef.current, dpr)
+    if (ctx) repintarTrazos(ctx, trazosRef.current, medidas.renderScale, medidas.w, medidas.h)
     return true
   }, [anclaRef])
 
@@ -100,15 +107,16 @@ export default function LeccionInkCapa({
 
   const persistir = useCallback(() => {
     guardarTrazosLeccion(semana, fecha, trazosRef.current)
-  }, [semana, fecha])
+    onTrazosChange?.(trazosRef.current.length)
+  }, [semana, fecha, onTrazosChange])
 
   const ctxVivo = useCallback(() => {
     const live = liveRef.current
     if (!live) return null
     if (!ctxLiveRef.current) {
       ctxLiveRef.current = crearContextoTinta(live)
-      const { dpr } = dims.current
-      ctxLiveRef.current?.setTransform(dpr, 0, 0, dpr, 0, 0)
+      const { renderScale } = dims.current
+      ctxLiveRef.current?.setTransform(renderScale, 0, 0, renderScale, 0, 0)
     }
     return ctxLiveRef.current
   }, [])
@@ -117,8 +125,8 @@ export default function LeccionInkCapa({
     const live = liveRef.current
     const ctx = ctxVivo()
     if (!live || !ctx) return
-    const { dpr } = dims.current
-    ctx.clearRect(0, 0, live.width / dpr, live.height / dpr)
+    const { w, h } = dims.current
+    ctx.clearRect(0, 0, w, h)
   }, [ctxVivo])
 
   const rectAncla = useCallback(() => anclaRef.current?.getBoundingClientRect() ?? null, [anclaRef])
@@ -147,7 +155,7 @@ export default function LeccionInkCapa({
       trazosRef.current = trazos
       persistir()
       const ctx = baseRef.current ? crearContextoTinta(baseRef.current) : null
-      if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.dpr)
+      if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.renderScale, dims.current.w, dims.current.h)
     },
     [persistir]
   )
@@ -183,6 +191,12 @@ export default function LeccionInkCapa({
   )
 
   useEffect(() => {
+    return () => {
+      bloquearScroll(false)
+    }
+  }, [bloquearScroll])
+
+  useEffect(() => {
     const live = liveRef.current
     if (!live || !puedeDibujar) return
 
@@ -212,7 +226,7 @@ export default function LeccionInkCapa({
           trazosRef.current = [...trazosRef.current, trazoDesdePuntos(pts)]
           persistir()
           const ctx = baseRef.current ? crearContextoTinta(baseRef.current) : null
-          if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.dpr)
+          if (ctx) repintarTrazos(ctx, trazosRef.current, dims.current.renderScale, dims.current.w, dims.current.h)
         }
       } else {
         trazoActivo.current = []

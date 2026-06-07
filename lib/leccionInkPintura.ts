@@ -125,10 +125,12 @@ export function pintarTrazoFinalEnCtx(
 export function repintarTrazos(
   ctx: CanvasRenderingContext2D,
   trazos: TrazoLeccionLocal[],
-  dpr: number
+  renderScale: number,
+  w: number,
+  h: number
 ) {
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.clearRect(0, 0, ctx.canvas.width / dpr, ctx.canvas.height / dpr)
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
+  ctx.clearRect(0, 0, w, h)
   for (const t of trazos) {
     pintarTrazoFinalEnCtx(ctx, t.points, t.color, t.size)
   }
