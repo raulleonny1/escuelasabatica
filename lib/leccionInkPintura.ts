@@ -5,21 +5,39 @@ import type { TrazoLeccionLocal } from "@/lib/leccionTintaLocal"
 export const COLOR_LAPIZ = "#92400e"
 export const GROSOR_LAPIZ = 2.75
 
-function contornoTrazo(points: PuntoInk[], size: number) {
+type OpcionesTrazo = {
+  size: number
+  smoothing: number
+  streamline: number
+}
+
+function contornoTrazo(points: PuntoInk[], opts: OpcionesTrazo) {
   const presionReal = trazoUsaPresionReal(points)
   return getStroke(
     points.map(([x, y, p]) => [x, y, p]),
     {
-      size,
-      thinning: presionReal ? 0.35 : 0.4,
-      smoothing: 0.55,
-      streamline: 0.62,
+      size: opts.size,
+      thinning: presionReal ? 0.4 : 0.45,
+      smoothing: opts.smoothing,
+      streamline: opts.streamline,
       simulatePressure: !presionReal,
-      easing: (t) => t,
-      start: { taper: 0, cap: true },
-      end: { taper: 0, cap: true },
+      easing: (t) => Math.sin((t * Math.PI) / 2),
+      start: { taper: 2, cap: true },
+      end: { taper: 2, cap: true },
     }
   )
+}
+
+const OPCIONES_VIVO: OpcionesTrazo = {
+  size: GROSOR_LAPIZ,
+  smoothing: 0.42,
+  streamline: 0.38,
+}
+
+const OPCIONES_FINAL: OpcionesTrazo = {
+  size: GROSOR_LAPIZ,
+  smoothing: 0.58,
+  streamline: 0.55,
 }
 
 export function pintarTrazoEnCtx(
@@ -27,7 +45,8 @@ export function pintarTrazoEnCtx(
   points: PuntoInk[],
   color: string,
   size: number,
-  opacidad = 1
+  opacidad = 1,
+  enVivo = false
 ) {
   if (points.length === 0) return
 
@@ -36,16 +55,25 @@ export function pintarTrazoEnCtx(
   ctx.fillStyle = color
 
   if (points.length === 1) {
-    const [x, y] = points[0]
+    const [x, y, pr] = points[0]
+    const r = size * (0.38 + pr * 0.12)
     ctx.beginPath()
-    ctx.arc(x, y, size * 0.42, 0, Math.PI * 2)
+    ctx.arc(x, y, r, 0, Math.PI * 2)
     ctx.fill()
     ctx.restore()
     return
   }
 
-  const outline = contornoTrazo(points, size)
+  const opts = enVivo
+    ? { ...OPCIONES_VIVO, size }
+    : { ...OPCIONES_FINAL, size }
+
+  const outline = contornoTrazo(points, opts)
   if (outline.length < 4) {
+    const [x, y] = points[points.length - 1]
+    ctx.beginPath()
+    ctx.arc(x, y, size * 0.4, 0, Math.PI * 2)
+    ctx.fill()
     ctx.restore()
     return
   }
@@ -68,7 +96,7 @@ export function repintarTrazos(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, ctx.canvas.width / dpr, ctx.canvas.height / dpr)
   for (const t of trazos) {
-    pintarTrazoEnCtx(ctx, t.points, t.color, t.size)
+    pintarTrazoEnCtx(ctx, t.points, t.color, t.size, 1, false)
   }
 }
 

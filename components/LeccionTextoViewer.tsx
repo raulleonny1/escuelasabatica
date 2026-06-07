@@ -232,6 +232,7 @@ export default function LeccionTextoViewer({
               fecha={fechaActiva}
               modo={modoTinta}
               anclaRef={lienzoRef}
+              scrollRef={contenidoRef}
             />
           </div>
         ) : (

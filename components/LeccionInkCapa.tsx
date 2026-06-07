@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react"
 import type { HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
+  agregarEventosPointer,
   agregarPuntosInk,
   crearContextoTinta,
   esEntradaDibujo,
   esPencilPointer,
   puntosCoalescidos,
+  puntosPredichos,
   type PuntoInk,
 } from "@/lib/leccionInkInput"
 import {
@@ -29,19 +31,28 @@ type Props = {
   fecha: string
   modo: Extract<HerramientaLeccion, "subrayar" | "borrador"> | null
   anclaRef: RefObject<HTMLElement | null>
+  scrollRef?: RefObject<HTMLElement | null>
 }
 
-export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props) {
+export default function LeccionInkCapa({
+  semana,
+  fecha,
+  modo,
+  anclaRef,
+  scrollRef,
+}: Props) {
   const baseRef = useRef<HTMLCanvasElement>(null)
   const liveRef = useRef<HTMLCanvasElement>(null)
   const trazosRef = useRef<TrazoLeccionLocal[]>([])
   const trazoActivo = useRef<PuntoInk[]>([])
+  const trazoPreview = useRef<PuntoInk[]>([])
   const pintando = useRef(false)
   const penPrioritario = useRef(false)
   const pointerId = useRef<number | null>(null)
   const rafPintar = useRef(0)
   const dims = useRef({ w: 0, h: 0, dpr: 1 })
   const modoRef = useRef(modo)
+  const scrollPrevio = useRef<string | null>(null)
   modoRef.current = modo
 
   const puedeDibujar = modo !== null
@@ -99,13 +110,18 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, live.width / dpr, live.height / dpr)
 
+    if (modoRef.current !== "subrayar") return
+
     const pts = trazoActivo.current
-    if (pts.length > 0 && modoRef.current === "subrayar") {
-      pintarTrazoEnCtx(ctx, pts, COLOR_LAPIZ, GROSOR_LAPIZ)
+    const extra = trazoPreview.current
+    const todos = extra.length ? pts.concat(extra) : pts
+    if (todos.length > 0) {
+      pintarTrazoEnCtx(ctx, todos, COLOR_LAPIZ, GROSOR_LAPIZ, 1, true)
     }
   }, [])
 
   const programarPintado = useCallback(() => {
+    pintarVivo()
     if (rafPintar.current) return
     rafPintar.current = requestAnimationFrame(() => {
       rafPintar.current = 0
@@ -115,9 +131,19 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
 
   const rectAncla = useCallback(() => anclaRef.current?.getBoundingClientRect() ?? null, [anclaRef])
 
-  const rechazarEntrada = useCallback((e: PointerEvent) => {
-    return penPrioritario.current && !esPencilPointer(e)
-  }, [])
+  const bloquearScroll = useCallback((bloquear: boolean) => {
+    const scroll = scrollRef?.current
+    if (!scroll) return
+    if (bloquear) {
+      scrollPrevio.current = scroll.style.overflow
+      scroll.style.overflow = "hidden"
+      scroll.style.touchAction = "none"
+    } else {
+      scroll.style.overflow = scrollPrevio.current ?? ""
+      scroll.style.touchAction = ""
+      scrollPrevio.current = null
+    }
+  }, [scrollRef])
 
   const aplicarBorrador = useCallback(
     (x: number, y: number) => {
@@ -139,66 +165,22 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       window.getSelection()?.removeAllRanges()
     }
 
-    const onPointerDown = (e: PointerEvent) => {
-      if (!modoRef.current || !esEntradaDibujo(e)) return
-      if (rechazarEntrada(e)) {
-        e.preventDefault()
-        return
-      }
-
-      const rect = rectAncla()
-      if (!rect) return
-
-      e.preventDefault()
-      limpiarSeleccion()
-      live.setPointerCapture(e.pointerId)
-      pointerId.current = e.pointerId
-      pintando.current = true
-      if (esPencilPointer(e)) penPrioritario.current = true
-
-      const puntos = puntosCoalescidos(e, rect)
-      const p = puntos[puntos.length - 1]
-      if (!p) return
-
-      if (modoRef.current === "borrador") {
-        aplicarBorrador(p[0], p[1])
-        return
-      }
-
-      trazoActivo.current = [p]
-      programarPintado()
-    }
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!pintando.current || pointerId.current !== e.pointerId) return
-      if (rechazarEntrada(e)) return
-
-      const rect = rectAncla()
-      if (!rect) return
-      e.preventDefault()
-      limpiarSeleccion()
-
-      const coalescidos = puntosCoalescidos(e, rect)
-      if (coalescidos.length === 0) return
-
-      if (modoRef.current === "borrador") {
-        for (const c of coalescidos) aplicarBorrador(c[0], c[1])
-        return
-      }
-
-      trazoActivo.current = agregarPuntosInk(trazoActivo.current, coalescidos, 0.8)
-      programarPintado()
-    }
-
-    const onPointerUp = (e: PointerEvent) => {
+    const finalizarTrazo = (e: PointerEvent) => {
       if (pointerId.current !== e.pointerId) return
 
+      const rect = rectAncla()
+      if (rect && modoRef.current === "subrayar") {
+        trazoActivo.current = agregarEventosPointer(trazoActivo.current, e, rect)
+      }
+
+      trazoPreview.current = []
       limpiarSeleccion()
       cancelAnimationFrame(rafPintar.current)
       rafPintar.current = 0
       pintando.current = false
       pointerId.current = null
-      if (esPencilPointer(e)) penPrioritario.current = false
+      penPrioritario.current = false
+      bloquearScroll(false)
 
       if (modoRef.current === "subrayar") {
         const pts = trazoActivo.current
@@ -214,7 +196,7 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       }
 
       const ctxLive = live ? crearContextoTinta(live) : null
-      if (ctxLive) {
+      if (ctxLive && live) {
         const { dpr } = dims.current
         ctxLive.clearRect(0, 0, live.width / dpr, live.height / dpr)
       }
@@ -226,19 +208,89 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       }
     }
 
+    const onPointerDown = (e: PointerEvent) => {
+      if (!modoRef.current || !esEntradaDibujo(e)) return
+      if (penPrioritario.current && !esPencilPointer(e)) {
+        e.preventDefault()
+        return
+      }
+
+      const rect = rectAncla()
+      if (!rect) return
+
+      e.preventDefault()
+      limpiarSeleccion()
+      live.setPointerCapture(e.pointerId)
+      pointerId.current = e.pointerId
+      pintando.current = true
+      trazoPreview.current = []
+      bloquearScroll(true)
+      if (esPencilPointer(e)) penPrioritario.current = true
+
+      const puntos = puntosCoalescidos(e, rect)
+      const p = puntos[puntos.length - 1]
+      if (!p) return
+
+      if (modoRef.current === "borrador") {
+        aplicarBorrador(p[0], p[1])
+        return
+      }
+
+      trazoActivo.current = agregarPuntosInk([], puntos)
+      programarPintado()
+    }
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!pintando.current || pointerId.current !== e.pointerId) return
+
+      const rect = rectAncla()
+      if (!rect) return
+      e.preventDefault()
+
+      if (modoRef.current === "borrador") {
+        const coalescidos = puntosCoalescidos(e, rect)
+        for (const c of coalescidos) aplicarBorrador(c[0], c[1])
+        return
+      }
+
+      trazoActivo.current = agregarEventosPointer(trazoActivo.current, e, rect)
+      trazoPreview.current = puntosPredichos(e, rect)
+      programarPintado()
+    }
+
+    const onPointerUp = (e: PointerEvent) => {
+      finalizarTrazo(e)
+    }
+
+    const onLostCapture = (e: PointerEvent) => {
+      if (pintando.current && pointerId.current === e.pointerId) {
+        finalizarTrazo(e)
+      }
+    }
+
     live.addEventListener("pointerdown", onPointerDown, { passive: false })
     live.addEventListener("pointermove", onPointerMove, { passive: false })
     live.addEventListener("pointerup", onPointerUp, { passive: false })
     live.addEventListener("pointercancel", onPointerUp, { passive: false })
+    live.addEventListener("lostpointercapture", onLostCapture)
 
     return () => {
       cancelAnimationFrame(rafPintar.current)
+      bloquearScroll(false)
       live.removeEventListener("pointerdown", onPointerDown)
       live.removeEventListener("pointermove", onPointerMove)
       live.removeEventListener("pointerup", onPointerUp)
       live.removeEventListener("pointercancel", onPointerUp)
+      live.removeEventListener("lostpointercapture", onLostCapture)
     }
-  }, [puedeDibujar, aplicarBorrador, persistir, programarPintado, rectAncla, rechazarEntrada])
+  }, [
+    puedeDibujar,
+    aplicarBorrador,
+    persistir,
+    programarPintado,
+    rectAncla,
+    bloquearScroll,
+  ])
 
   return (
     <div

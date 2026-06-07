@@ -259,10 +259,6 @@ export default function LeccionContenidoFormateado({
     if (!root) return
 
     const onSelectionChange = () => {
-      if (esHerramientaTinta(herramientaRef.current)) {
-        window.getSelection()?.removeAllRanges()
-        return
-      }
       if (!esHerramientaResalte(herramientaRef.current)) return
       const sel = window.getSelection()
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return
