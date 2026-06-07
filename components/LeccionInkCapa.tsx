@@ -1,12 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useRef, type RefObject } from "react"
-import { esEntradaPen } from "@/lib/pizarraTinta"
 import type { HerramientaLeccion } from "@/lib/leccionAnotaciones"
 import {
   agregarPuntosInk,
   crearContextoTinta,
   esEntradaDibujo,
+  esPencilPointer,
   puntosCoalescidos,
   type PuntoInk,
 } from "@/lib/leccionInkInput"
@@ -32,7 +32,6 @@ type Props = {
 }
 
 export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props) {
-  const capasRef = useRef<HTMLDivElement>(null)
   const baseRef = useRef<HTMLCanvasElement>(null)
   const liveRef = useRef<HTMLCanvasElement>(null)
   const trazosRef = useRef<TrazoLeccionLocal[]>([])
@@ -117,7 +116,7 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
   const rectAncla = useCallback(() => anclaRef.current?.getBoundingClientRect() ?? null, [anclaRef])
 
   const rechazarEntrada = useCallback((e: PointerEvent) => {
-    return penPrioritario.current && e.pointerType !== "pen"
+    return penPrioritario.current && !esPencilPointer(e)
   }, [])
 
   const aplicarBorrador = useCallback(
@@ -133,8 +132,8 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
   )
 
   useEffect(() => {
-    const capas = capasRef.current
-    if (!capas || !puedeDibujar) return
+    const live = liveRef.current
+    if (!live || !puedeDibujar) return
 
     const limpiarSeleccion = () => {
       window.getSelection()?.removeAllRanges()
@@ -151,12 +150,11 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       if (!rect) return
 
       e.preventDefault()
-      e.stopPropagation()
       limpiarSeleccion()
-      capas.setPointerCapture(e.pointerId)
+      live.setPointerCapture(e.pointerId)
       pointerId.current = e.pointerId
       pintando.current = true
-      if (esEntradaPen(e.pointerType)) penPrioritario.current = true
+      if (esPencilPointer(e)) penPrioritario.current = true
 
       const puntos = puntosCoalescidos(e, rect)
       const p = puntos[puntos.length - 1]
@@ -178,7 +176,7 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
       const rect = rectAncla()
       if (!rect) return
       e.preventDefault()
-      e.stopPropagation()
+      limpiarSeleccion()
 
       const coalescidos = puntosCoalescidos(e, rect)
       if (coalescidos.length === 0) return
@@ -195,15 +193,12 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
     const onPointerUp = (e: PointerEvent) => {
       if (pointerId.current !== e.pointerId) return
 
-      e.preventDefault()
-      e.stopPropagation()
       limpiarSeleccion()
-
       cancelAnimationFrame(rafPintar.current)
       rafPintar.current = 0
       pintando.current = false
       pointerId.current = null
-      if (esEntradaPen(e.pointerType)) penPrioritario.current = false
+      if (esPencilPointer(e)) penPrioritario.current = false
 
       if (modoRef.current === "subrayar") {
         const pts = trazoActivo.current
@@ -218,43 +213,35 @@ export default function LeccionInkCapa({ semana, fecha, modo, anclaRef }: Props)
         trazoActivo.current = []
       }
 
-      const live = liveRef.current
       const ctxLive = live ? crearContextoTinta(live) : null
-      if (ctxLive && live) {
+      if (ctxLive) {
         const { dpr } = dims.current
         ctxLive.clearRect(0, 0, live.width / dpr, live.height / dpr)
       }
 
       try {
-        capas.releasePointerCapture(e.pointerId)
+        live.releasePointerCapture(e.pointerId)
       } catch {
         /* ya liberado */
       }
     }
 
-    const onSelectStart = (e: Event) => {
-      e.preventDefault()
-    }
-
-    capas.addEventListener("pointerdown", onPointerDown, { passive: false })
-    capas.addEventListener("pointermove", onPointerMove, { passive: false })
-    capas.addEventListener("pointerup", onPointerUp, { passive: false })
-    capas.addEventListener("pointercancel", onPointerUp, { passive: false })
-    capas.addEventListener("selectstart", onSelectStart)
+    live.addEventListener("pointerdown", onPointerDown, { passive: false })
+    live.addEventListener("pointermove", onPointerMove, { passive: false })
+    live.addEventListener("pointerup", onPointerUp, { passive: false })
+    live.addEventListener("pointercancel", onPointerUp, { passive: false })
 
     return () => {
       cancelAnimationFrame(rafPintar.current)
-      capas.removeEventListener("pointerdown", onPointerDown)
-      capas.removeEventListener("pointermove", onPointerMove)
-      capas.removeEventListener("pointerup", onPointerUp)
-      capas.removeEventListener("pointercancel", onPointerUp)
-      capas.removeEventListener("selectstart", onSelectStart)
+      live.removeEventListener("pointerdown", onPointerDown)
+      live.removeEventListener("pointermove", onPointerMove)
+      live.removeEventListener("pointerup", onPointerUp)
+      live.removeEventListener("pointercancel", onPointerUp)
     }
   }, [puedeDibujar, aplicarBorrador, persistir, programarPintado, rectAncla, rechazarEntrada])
 
   return (
     <div
-      ref={capasRef}
       className={`leccion-ink-capas${puedeDibujar ? " leccion-ink-capa-activa" : ""}${
         modo === "borrador" ? " leccion-ink-capa-borrador" : ""
       }`}
