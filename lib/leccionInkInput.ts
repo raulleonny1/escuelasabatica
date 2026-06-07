@@ -63,10 +63,27 @@ export function esPencilPointer(
   return false
 }
 
+export function esDispositivoTactil(): boolean {
+  return (
+    typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
+  )
+}
+
+/** Distancia mínima entre puntos guardados (más denso con lápiz). */
+export function minDistSegunPointer(e: PointerEvent): number {
+  if (e.pointerType === "pen") return 0.35
+  if (e.pointerType === "mouse") return 0.9
+  return 0.6
+}
+
 export function esEntradaDibujo(e: PointerEvent): boolean {
   if (e.pointerType === "pen") return true
   if (e.pointerType === "mouse") return e.buttons === 1
-  if (e.pointerType === "touch") return true
+  if (e.pointerType === "touch") {
+    // iPad: el dedo desplaza; solo Apple Pencil dibuja
+    if (esDispositivoTactil()) return false
+    return true
+  }
   return false
 }
 

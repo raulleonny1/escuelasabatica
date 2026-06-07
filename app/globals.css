@@ -773,6 +773,16 @@ html[data-lectura="1"] .pdf-zoom-bar {
   pointer-events: auto;
 }
 
+@media (pointer: coarse) {
+  .leccion-ink-capa-activa {
+    touch-action: pan-y;
+  }
+
+  .leccion-ink-live-trazo {
+    touch-action: none;
+  }
+}
+
 .leccion-ink-capa-activa .leccion-ink-live {
   touch-action: none;
   cursor: crosshair;

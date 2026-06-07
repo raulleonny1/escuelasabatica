@@ -8,6 +8,7 @@ import {
   crearContextoTinta,
   esEntradaDibujo,
   esPencilPointer,
+  minDistSegunPointer,
   puntoDesdePointer,
   puntosCoalescidos,
   type PuntoInk,
@@ -50,11 +51,12 @@ export default function LeccionInkCapa({
   const trazoActivo = useRef<PuntoInk[]>([])
   const ultimoPunto = useRef<PuntoInk | null>(null)
   const pintando = useRef(false)
-  const penPrioritario = useRef(false)
+  const penActivo = useRef(false)
   const pointerId = useRef<number | null>(null)
   const dims = useRef({ w: 0, h: 0, renderScale: 1 })
   const modoRef = useRef(modo)
   const scrollPrevio = useRef<string | null>(null)
+  const ventanaEnlazada = useRef(false)
   modoRef.current = modo
 
   const sincronizarCanvas = useCallback(() => {
@@ -65,6 +67,10 @@ export default function LeccionInkCapa({
     const w = Math.max(ancla.scrollWidth, ancla.clientWidth)
     const h = Math.max(ancla.scrollHeight, ancla.clientHeight)
     if (w <= 0 || h <= 0) return false
+
+    if (dims.current.w === w && dims.current.h === h && live.width > 0) {
+      return true
+    }
 
     const medidas = calcularDimensionesCanvas(w, h)
     dims.current = {
@@ -90,6 +96,14 @@ export default function LeccionInkCapa({
   useEffect(() => {
     trazosRef.current = leerTrazosLeccion(semana, fecha)
   }, [semana, fecha])
+
+  /** Prepara el canvas oculto al activar lápiz (iPad: primer trazo sin retraso). */
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      sincronizarCanvas()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [sincronizarCanvas, semana, fecha, modo])
 
   useEffect(() => {
     const ancla = anclaRef.current
@@ -121,15 +135,8 @@ export default function LeccionInkCapa({
     const live = liveRef.current
     const ctx = ctxVivo()
     if (!live || !ctx) return
-    const { w, h } = dims.current
-    ctx.setTransform(
-      dims.current.renderScale,
-      0,
-      0,
-      dims.current.renderScale,
-      0,
-      0
-    )
+    const { w, h, renderScale } = dims.current
+    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0)
     ctx.clearRect(0, 0, w, h)
   }, [ctxVivo])
 
@@ -167,6 +174,7 @@ export default function LeccionInkCapa({
       const ctx = ctxVivo()
       if (!ctx) return
 
+      const minDist = minDistSegunPointer(e)
       const eventos =
         typeof e.getCoalescedEvents === "function" && e.getCoalescedEvents().length > 0
           ? e.getCoalescedEvents()
@@ -184,7 +192,7 @@ export default function LeccionInkCapa({
 
         ultimoPunto.current = p
         if (guardar) {
-          trazoActivo.current = agregarPuntosInk(trazoActivo.current, [p], 0.9)
+          trazoActivo.current = agregarPuntosInk(trazoActivo.current, [p], minDist)
         }
       }
     },
@@ -206,6 +214,22 @@ export default function LeccionInkCapa({
       window.getSelection()?.removeAllRanges()
     }
 
+    const desenlazarVentana = () => {
+      if (!ventanaEnlazada.current) return
+      ventanaEnlazada.current = false
+      window.removeEventListener("pointermove", onPointerMove)
+      window.removeEventListener("pointerup", onPointerUp)
+      window.removeEventListener("pointercancel", onPointerUp)
+    }
+
+    const enlazarVentana = () => {
+      if (ventanaEnlazada.current) return
+      ventanaEnlazada.current = true
+      window.addEventListener("pointermove", onPointerMove, { passive: false })
+      window.addEventListener("pointerup", onPointerUp, { passive: false })
+      window.addEventListener("pointercancel", onPointerUp, { passive: false })
+    }
+
     const finalizarTrazo = (e: PointerEvent) => {
       if (pointerId.current !== e.pointerId) return
 
@@ -214,10 +238,11 @@ export default function LeccionInkCapa({
         procesarMuestras(e, rect, true)
       }
 
+      desenlazarVentana()
       limpiarSeleccion()
       pintando.current = false
       pointerId.current = null
-      penPrioritario.current = false
+      penActivo.current = false
       ultimoPunto.current = null
       bloquearScroll(false)
 
@@ -244,9 +269,9 @@ export default function LeccionInkCapa({
     }
 
     const onPointerDown = (e: PointerEvent) => {
-      if (!modoRef.current || !esEntradaDibujo(e)) return
-      if (penPrioritario.current && !esPencilPointer(e)) {
-        e.preventDefault()
+      // iPad: dedo pasa al scroll (sin preventDefault)
+      if (!esEntradaDibujo(e)) return
+      if (penActivo.current && !esPencilPointer(e) && e.pointerType !== "mouse") {
         return
       }
 
@@ -265,7 +290,8 @@ export default function LeccionInkCapa({
       ctxLiveRef.current = null
       limpiarCapaViva()
       bloquearScroll(true)
-      if (esPencilPointer(e)) penPrioritario.current = true
+      enlazarVentana()
+      if (esPencilPointer(e)) penActivo.current = true
 
       if (modoRef.current === "borrador") {
         const puntos = puntosCoalescidos(e, rect)
@@ -277,12 +303,13 @@ export default function LeccionInkCapa({
       procesarMuestras(e, rect, true)
     }
 
-    const onPointerMove = (e: PointerEvent) => {
+    function onPointerMove(e: PointerEvent) {
       if (!pintando.current || pointerId.current !== e.pointerId) return
 
       const rect = rectAncla()
       if (!rect) return
       e.preventDefault()
+      limpiarSeleccion()
 
       if (modoRef.current === "borrador") {
         for (const c of puntosCoalescidos(e, rect)) aplicarBorrador(c[0], c[1])
@@ -292,7 +319,7 @@ export default function LeccionInkCapa({
       procesarMuestras(e, rect, true)
     }
 
-    const onPointerUp = (e: PointerEvent) => {
+    function onPointerUp(e: PointerEvent) {
       finalizarTrazo(e)
     }
 
@@ -309,6 +336,7 @@ export default function LeccionInkCapa({
     capas.addEventListener("lostpointercapture", onLostCapture)
 
     return () => {
+      desenlazarVentana()
       bloquearScroll(false)
       capas.removeEventListener("pointerdown", onPointerDown)
       capas.removeEventListener("pointermove", onPointerMove)
