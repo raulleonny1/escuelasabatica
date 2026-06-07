@@ -72,6 +72,9 @@ const PdfViewer = dynamic(() => import("@/components/PdfViewer"), { ssr: false }
 const LeccionTextoViewer = dynamic(() => import("@/components/LeccionTextoViewer"), {
   ssr: false,
 })
+const ResumenSemanalViewer = dynamic(() => import("@/components/ResumenSemanalViewer"), {
+  ssr: false,
+})
 
 type MobileTab = "pdf" | "estudio" | "chat"
 
@@ -106,6 +109,7 @@ export default function Home() {
     url: string
     titulo: string
   } | null>(null)
+  const [vistaResumenSemanal, setVistaResumenSemanal] = useState(false)
   const isLg = useMediaLg()
   const compactoTablet = useCabeceraCompacta()
 
@@ -151,6 +155,10 @@ export default function Home() {
   useEffect(() => {
     desbloquearSonidosEnInteraccion()
   }, [])
+
+  useEffect(() => {
+    setVistaResumenSemanal(false)
+  }, [semana])
 
   useEffect(() => {
     if (!chatNombre || !claseId) return
@@ -501,11 +509,20 @@ export default function Home() {
   /** Misma acción que el botón «Lección»: PDF del día y pestaña lección en móvil */
   const irALeccionDelDia = useCallback(() => {
     setMaterialMaestroPdf(null)
+    setVistaResumenSemanal(false)
     setTipo("leccion")
     setSelectedDate(getFechaDestacadaEnSemana(semana))
     setLeccionJump((n) => n + 1)
     setMobileTab("pdf")
   }, [semana])
+
+  const cambiarVistaResumen = useCallback((activo: boolean) => {
+    setVistaResumenSemanal(activo)
+    if (activo) {
+      setMaterialMaestroPdf(null)
+      setMobileTab("pdf")
+    }
+  }, [])
 
   const pdfUrl = getPdfUrl(semana, tipo)
   const pdfUrlActivo = materialMaestroPdf?.url ?? pdfUrl
@@ -563,12 +580,16 @@ export default function Home() {
               tipo={tipo}
               setTipo={setTipo}
               onLeccionClick={irALeccionDelDia}
+              vistaResumenSemanal={vistaResumenSemanal}
+              setVistaResumenSemanal={cambiarVistaResumen}
               compacto={compactoTablet}
             />
           </MobilePdfControls>
           <div className="layout-pdf-canvas relative min-h-0 flex-1 overflow-hidden">
             <PdfErrorBoundary url={pdfUrlActivo}>
-              {!materialMaestroPdf && tipo === "leccion" && semanaTieneLeccion(semana) ? (
+              {!materialMaestroPdf && vistaResumenSemanal ? (
+                <ResumenSemanalViewer key={`resumen-${semana}`} semana={semana} />
+              ) : !materialMaestroPdf && tipo === "leccion" && semanaTieneLeccion(semana) ? (
                 <LeccionTextoViewer
                   key={`texto-${semana}-${leccionJump}`}
                   semana={semana}
@@ -600,6 +621,8 @@ export default function Home() {
             tipo={tipo}
             setTipo={setTipo}
             onLeccionClick={irALeccionDelDia}
+            vistaResumenSemanal={vistaResumenSemanal}
+            setVistaResumenSemanal={cambiarVistaResumen}
           />
         </div>
 

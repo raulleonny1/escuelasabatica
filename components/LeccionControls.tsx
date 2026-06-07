@@ -16,6 +16,8 @@ interface LeccionControlsProps {
   tipo: string
   setTipo: (t: string) => void
   onLeccionClick?: () => void
+  vistaResumenSemanal?: boolean
+  setVistaResumenSemanal?: (v: boolean) => void
   compacto?: boolean
 }
 
@@ -25,12 +27,34 @@ export default function LeccionControls({
   tipo,
   setTipo,
   onLeccionClick,
+  vistaResumenSemanal = false,
+  setVistaResumenSemanal,
   compacto = false,
 }: LeccionControlsProps) {
   function elegirTipo(id: string) {
+    setVistaResumenSemanal?.(false)
     setTipo(id)
     if (id === "leccion") onLeccionClick?.()
   }
+
+  function elegirResumen() {
+    if (vistaResumenSemanal) {
+      setVistaResumenSemanal?.(false)
+      onLeccionClick?.()
+    } else {
+      setVistaResumenSemanal?.(true)
+    }
+  }
+
+  const btnTipo = (activo: boolean) =>
+    activo
+      ? "bg-primary text-white shadow-sm"
+      : "border border-border bg-white text-slate-600"
+
+  const btnTipoFull = (activo: boolean) =>
+    activo
+      ? "bg-primary text-white shadow-md shadow-primary/25"
+      : "border border-border bg-white text-slate-600"
 
   if (compacto) {
     return (
@@ -56,15 +80,18 @@ export default function LeccionControls({
               key={t.id}
               type="button"
               onClick={() => elegirTipo(t.id)}
-              className={`min-h-9 flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition active:scale-[0.98] ${
-                tipo === t.id
-                  ? "bg-primary text-white shadow-sm"
-                  : "border border-border bg-white text-slate-600"
-              }`}
+              className={`min-h-9 flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition active:scale-[0.98] ${btnTipo(!vistaResumenSemanal && tipo === t.id)}`}
             >
               {t.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={elegirResumen}
+            className={`min-h-9 flex-1 rounded-lg px-2 py-1.5 text-sm font-medium transition active:scale-[0.98] ${btnTipo(vistaResumenSemanal)}`}
+          >
+            Resumen
+          </button>
         </div>
       </section>
     )
@@ -87,21 +114,24 @@ export default function LeccionControls({
       </select>
 
       <p className="mb-2 mt-3 text-xs text-slate-500">Tipo de material</p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {TIPOS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => elegirTipo(t.id)}
-            className={`min-h-11 rounded-lg px-2 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${
-              tipo === t.id
-                ? "bg-primary text-white shadow-md shadow-primary/25"
-                : "border border-border bg-white text-slate-600"
-            }`}
+            className={`min-h-11 rounded-lg px-2 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${btnTipoFull(!vistaResumenSemanal && tipo === t.id)}`}
           >
             {t.label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={elegirResumen}
+          className={`min-h-11 rounded-lg px-2 py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${btnTipoFull(vistaResumenSemanal)}`}
+        >
+          Resumen
+        </button>
       </div>
     </section>
   )
