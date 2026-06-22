@@ -1,21 +1,33 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { formatearParrafosDia } from "@/lib/leccionFormato"
+import { type DiaLeccionCompleto } from "@/lib/leccionAuxiliar"
 import { cargarSemanaConOffline } from "@/lib/leccionOffline"
-import {
-  construirResumenSemanalTematico,
-  type ResumenSemanalTematico,
-} from "@/lib/resumenSemanalTematico"
+import { getFechasSemana } from "@/lib/semana"
 import { hayConexion } from "@/lib/syncCola"
 
 type Props = {
   semana: number
 }
 
+function tituloLeccion(dias: DiaLeccionCompleto[], semana: number): string {
+  for (const dia of dias) {
+    for (const b of formatearParrafosDia(dia.parrafos)) {
+      if (b.tipo === "tituloLeccion") return b.texto.trim()
+    }
+  }
+  const t = dias[0]?.titulo?.trim()
+  if (t && t.length > 5) return t
+  return `Semana ${semana}`
+}
+
 export default function ResumenSemanalViewer({ semana }: Props) {
+  const [dias, setDias] = useState<DiaLeccionCompleto[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [resumen, setResumen] = useState<ResumenSemanalTematico | null>(null)
+
+  const fechasSemana = useMemo(() => getFechasSemana(semana), [semana])
 
   useEffect(() => {
     let cancelado = false
@@ -23,9 +35,9 @@ export default function ResumenSemanalViewer({ semana }: Props) {
     setError(null)
 
     void cargarSemanaConOffline(semana)
-      .then((dias) => {
+      .then((bloques) => {
         if (cancelado) return
-        setResumen(construirResumenSemanalTematico(semana, dias))
+        setDias(bloques)
         setCargando(false)
       })
       .catch((e) => {
@@ -39,10 +51,19 @@ export default function ResumenSemanalViewer({ semana }: Props) {
     }
   }, [semana])
 
-  const vacio = useMemo(
-    () => resumen !== null && resumen.objetivos.length === 0,
-    [resumen]
-  )
+  const entradas = useMemo(() => {
+    return fechasSemana.map((f, i) => {
+      const bloque = dias.find((d) => d.fecha === f.fecha) ?? dias[i]
+      return {
+        fecha: f.fecha,
+        etiqueta: `${f.diaCorto} ${f.diaNum} ${f.mesCorto}`,
+        resumen: bloque?.resumen?.trim() ?? "",
+      }
+    })
+  }, [dias, fechasSemana])
+
+  const hayResumenes = entradas.some((e) => e.resumen.length > 0)
+  const titulo = tituloLeccion(dias, semana)
 
   if (cargando) {
     return (
@@ -53,7 +74,7 @@ export default function ResumenSemanalViewer({ semana }: Props) {
     )
   }
 
-  if (error || !resumen) {
+  if (error) {
     return (
       <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center text-sm">
         <p className="font-semibold text-red-700">No se pudo cargar el resumen</p>
@@ -71,52 +92,33 @@ export default function ResumenSemanalViewer({ semana }: Props) {
     <div className="resumen-semanal-viewer flex h-full min-h-0 bg-[#faf8f3]">
       <div className="resumen-semanal-scroll custom-scroll min-h-0 flex-1 overflow-y-auto">
         <article className="resumen-semanal-articulo mx-auto max-w-3xl px-4 py-6 sm:px-8 sm:py-10">
-          <p className="resumen-semanal-etiqueta">Semana {semana} · Objetivos de la semana</p>
-          <h1 className="resumen-semanal-titulo">{resumen.tituloLeccion}</h1>
-          <p className="resumen-semanal-intro">{resumen.introPedagogica}</p>
+          <p className="resumen-semanal-etiqueta">Semana {semana} · Resumen de la lección</p>
+          <h1 className="resumen-semanal-titulo">{titulo}</h1>
+          <p className="resumen-semanal-intro">
+            Resumen oficial de cada día, tomado del material auxiliar de la lección.
+          </p>
 
-          {vacio ? (
+          {!hayResumenes ? (
             <p className="resumen-semanal-vacio">
-              Abre la lección de esta semana con internet al menos una vez para descargar el PDF de
-              resumen auxiliar.
+              Aún no hay resumen descargado para esta semana. Conéctate a internet y abre la lección
+              para cargar el PDF auxiliar de resumen.
             </p>
           ) : (
             <div className="resumen-semanal-tramos">
-              {resumen.objetivos.map((obj) => (
-                <section key={obj.numero} className="resumen-semanal-tramo">
-                  <div className="resumen-semanal-tramo-cabecera">
-                    <span className="resumen-semanal-tramo-num" aria-hidden>
-                      {obj.numero}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="resumen-semanal-tramo-sub">{obj.verbo}</p>
-                      <h2 className="resumen-semanal-tramo-titulo">{obj.titulo}</h2>
+              {entradas.map((entrada, i) =>
+                entrada.resumen ? (
+                  <section key={entrada.fecha} className="resumen-semanal-tramo">
+                    <div className="resumen-semanal-tramo-cabecera">
+                      <span className="resumen-semanal-tramo-num" aria-hidden>
+                        {i + 1}
+                      </span>
+                      <h2 className="resumen-semanal-tramo-titulo">{entrada.etiqueta}</h2>
                     </div>
-                  </div>
-
-                  {obj.indicadores.length > 0 && (
-                    <ul className="resumen-semanal-indicadores">
-                      {obj.indicadores.map((ind, i) => (
-                        <li key={i}>{ind}</li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {obj.parrafos.map((p, i) => (
-                    <p key={i} className="resumen-semanal-parrafo">
-                      {p}
-                    </p>
-                  ))}
-                </section>
-              ))}
+                    <p className="resumen-semanal-parrafo">{entrada.resumen}</p>
+                  </section>
+                ) : null
+              )}
             </div>
-          )}
-
-          {!vacio && (
-            <footer className="resumen-semanal-cierre">
-              <p className="resumen-semanal-cierre-etiq">Para llevar</p>
-              <p className="resumen-semanal-cierre-texto">{resumen.cierre}</p>
-            </footer>
           )}
         </article>
       </div>

@@ -58,7 +58,7 @@ export async function descargarSemanaParaOffline(semana: number): Promise<void> 
   }
 }
 
-/** Guarda en el dispositivo todas las semanas con lector de texto (8–12) y PDFs del trimestre. */
+/** Guarda en el dispositivo todas las semanas con lector de texto (8–13) y PDFs del trimestre. */
 export async function descargarTrimestreParaOffline(
   onProgreso?: (hecho: number, total: number) => void
 ): Promise<void> {
