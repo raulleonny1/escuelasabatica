@@ -18,6 +18,7 @@ const sourceSans = Source_Sans_3({
 })
 
 export const metadata = {
+  metadataBase: new URL("https://escuelasabatica-sable.vercel.app"),
   title: "Escuela Sabática",
   description: "Lección del trimestre | Estudio Bíblico Diario",
   manifest: "/manifest.json",
@@ -36,7 +37,7 @@ export const metadata = {
   },
   other: {
     "mobile-web-app-capable": "yes",
-    "google-adsense-account": "ca-pub-6850511900744053",
+    "google-adsense-account": "ca-pub-3657043800068137",
   },
 }
 
@@ -58,9 +59,10 @@ export default function RootLayout({
   return (
     <html lang="es" data-text-size="0" className={`${lora.variable} ${sourceSans.variable}`}>
       <head>
+        <meta name="google-adsense-account" content="ca-pub-3657043800068137" />
         <script
           async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6850511900744053"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3657043800068137"
           crossOrigin="anonymous"
         />
       </head>
