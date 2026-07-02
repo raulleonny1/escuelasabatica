@@ -95,7 +95,7 @@ export default function ResumenSemanalViewer({ semana }: Props) {
           <p className="resumen-semanal-etiqueta">Semana {semana} · Resumen de la lección</p>
           <h1 className="resumen-semanal-titulo">{titulo}</h1>
           <p className="resumen-semanal-intro">
-            Resumen oficial de cada día, tomado del material auxiliar de la lección.
+            Resumen de cada día, generado a partir del texto de la lección de ese día.
           </p>
 
           {!hayResumenes ? (

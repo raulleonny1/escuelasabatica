@@ -1,3 +1,4 @@
+import { generarResumenDelDia } from "@/lib/resumenLeccion"
 import { getPdfUrl } from "@/lib/pdfUrls"
 import { cargarLeccionPorDias, extraerParrafosPdf, type DiaLeccionTexto } from "@/lib/leccionTexto"
 import { resolverUrlPdf, revocarUrlPdfBlob } from "@/lib/offlinePdf"
@@ -240,7 +241,11 @@ export async function cargarSemanaCompletaDesdeRed(semana: number): Promise<DiaL
   const preguntasPorDia = parsearPreguntasPorDia(parrafosPreguntas ?? [])
 
   return diasLeccion.map((dia, i) => {
-    const resumen = resumenPorDia[i] ?? ""
+    const resumenAuxiliar = (resumenPorDia[i] ?? "").trim()
+    const resumen =
+      dia.parrafos.length > 0
+        ? generarResumenDelDia(dia.parrafos)
+        : resumenAuxiliar
     const preguntas = completarRespuestasDelDia(preguntasPorDia[i] ?? [], resumen)
     return { ...dia, resumen, preguntas }
   })

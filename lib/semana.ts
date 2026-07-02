@@ -1,5 +1,5 @@
-/** Sábado de inicio del trimestre (ajusta si cambia el calendario) */
-export const TRIMESTRE_INICIO = "2026-03-28"
+/** Sábado de inicio del trimestre (tercer trimestre 2026) */
+export const TRIMESTRE_INICIO = "2026-06-27"
 export const TOTAL_SEMANAS = 13
 
 export function fechaLocalHoy(): string {
