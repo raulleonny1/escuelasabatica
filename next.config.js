@@ -3,6 +3,8 @@ const withPWA = require("next-pwa")({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
+  // No precachear ads.txt / robots: AdSense debe leerlos en crudo
+  publicExcludes: ["!noprecache/**/*", "!ads.txt", "!robots.txt"],
   runtimeCaching: [
     {
       urlPattern: /^https?:\/\/.*\/pdfs\/.*\.pdf$/i,
@@ -41,13 +43,25 @@ const withPWA = require("next-pwa")({
       },
     },
   ],
-});
+})
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Evita doble montaje del visor PDF en desarrollo (rompe pdf.js)
   reactStrictMode: false,
   turbopack: {},
-};
+  async headers() {
+    return [
+      {
+        source: "/ads.txt",
+        headers: [
+          { key: "Content-Type", value: "text/plain; charset=utf-8" },
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ]
+  },
+}
 
-module.exports = withPWA(nextConfig);
+module.exports = withPWA(nextConfig)
